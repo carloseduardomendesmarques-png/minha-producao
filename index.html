@@ -33,7 +33,7 @@ button,input,select{font:inherit;color:inherit}
 main{max-width:640px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
 .hero{background:var(--brand);color:var(--brand-ink);border:none}
-.hero .lbl{opacity:.85;font-size:14px}
+.hero .lbl{color:inherit;opacity:.85;font-size:14px}
 .hero .big{font-size:32px;font-weight:700;letter-spacing:-.5px;margin:2px 0 8px}
 .hero .next{font-size:14px;opacity:.95}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
@@ -50,8 +50,11 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 .items li b{color:var(--ink);font-weight:550;white-space:nowrap}
 .late{border-color:var(--warn);background:var(--warn-soft)}
 .tag{display:inline-block;font-size:12px;font-weight:550;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:8px;vertical-align:middle}
-.tag.wait{background:var(--brand-soft);color:var(--brand)}
-.tag.done{background:var(--ok-soft);color:var(--ok)}
+.mtabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
+.mtabs::-webkit-scrollbar{display:none}
+.mtab{flex:none;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:8px 14px;cursor:pointer;font-weight:550;color:var(--muted)}
+.mtab.on{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+h3.sec{font-size:14px;font-weight:650;margin:16px 4px 8px}
 .row-btns{display:flex;gap:8px;margin-top:10px}
 .btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:550}
 .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
@@ -232,41 +235,64 @@ function rotulo(e){
 }
 
 // ---------- telas ----------
-let tab = "resumo";
+let tab = "resumo", mesSel = null;
 const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", cont:{}, qtd:1, valor:""};
 
 function vResumo(){
   const hoje=hojeStr(), pg=pagamentos();
   if(!S.entries.length) return `<div class="card empty"><p><b>Nada lançado ainda.</b></p><p>Lance seus exames, turnos e sobreavisos e o app calcula quanto e quando você vai receber.</p><button class="btn pri" data-act="go" data-tab="lancar">Fazer o primeiro lançamento</button></div>`;
-  const pend=pg.filter(g=>!S.recebidos[g.data]);
-  const atras=pend.filter(g=>g.data<hoje), fut=pend.filter(g=>g.data>=hoje);
-  const totalPend=pend.reduce((s,g)=>s+g.total,0);
-  const pe=periodoEletivo(hoje);
-  const ele=S.entries.filter(e=>e.tipo==="eletivo"&&e.data>=pe.ini&&e.data<=pe.fim);
-  const eleV=ele.reduce((s,e)=>s+e.qtd*e.valorUnit,0), eleQ=ele.reduce((s,e)=>s+e.qtd,0);
-  const p=parse(hoje), mesTxt=MESES[p.m];
-  const fixos=S.entries.filter(e=>e.tipo!=="eletivo"&&e.tipo!=="fechamento"&&e.data.slice(0,7)===hoje.slice(0,7));
-  const fixV=fixos.reduce((s,e)=>s+valorEntrada(e),0);
-  const card = (g,late) => `<div class="card${late?" late":""}">
-    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}<span class="tag ${late?"":"wait"}">${late?"confirmar":"a receber"}</span></span><span class="t">${R(g.total)}</span></div>
-    <ul class="items">${Object.values(g.itens).map(i=>`<li><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}</span><b>${R(i.valor)}</b></li>`).join("")}</ul>
-    <div class="row-btns"><button class="btn" data-act="receber" data-d="${g.data}">Marcar como recebido</button></div></div>`;
-  const recebidos=pg.filter(g=>S.recebidos[g.data]).reverse();
+  // o que já passou da data conta como pago; o resto é "a receber"
+  const fut=pg.filter(g=>g.data>=hoje);
+  const totalFut=fut.reduce((s,g)=>s+g.total,0);
+  const meses=mesesDisponiveis();
+  if(!mesSel||!meses.includes(mesSel)) mesSel=hoje.slice(0,7);
+  const rec=pg.filter(g=>g.data.slice(0,7)===mesSel), recT=rec.reduce((s,g)=>s+g.total,0);
+  const prod=producaoMes(mesSel), prodT=prod.reduce((s,i)=>s+i.valor,0);
   return `
   <div class="card hero">
     <div class="lbl">Total a receber</div>
-    <div class="big">${R(totalPend)}</div>
+    <div class="big">${R(totalFut)}</div>
     <div class="next">${fut.length?`Próximo: <b>${R(fut[0].total)}</b> em ${fData(fut[0].data)}`:"Nenhum pagamento futuro"}</div>
   </div>
+  <div class="mtabs">${meses.map(k=>`<button class="mtab${k===mesSel?" on":""}" data-act="mes" data-k="${k}">${abrevMes(k)}</button>`).join("")}</div>
+  <h2>${nomeMes(mesSel)}</h2>
   <div class="grid2">
-    <div class="card"><div class="lbl">Eletivos ${fCurta(pe.ini)} a ${fCurta(pe.fim)}</div><div class="val">${R(eleV)}</div><div class="small">${eleQ} exame${eleQ===1?"":"s"} · paga ${fCurta(pe.pag)}</div></div>
-    <div class="card"><div class="lbl">Turnos e plantões de ${mesTxt}</div><div class="val">${R(fixV)}</div><div class="small">${fixos.length} lançamento${fixos.length===1?"":"s"}</div></div>
+    <div class="card"><div class="lbl">Produzido no mês</div><div class="val">${R(prodT)}</div></div>
+    <div class="card"><div class="lbl">${mesSel<hoje.slice(0,7)?"Recebido no mês":"A receber no mês"}</div><div class="val">${R(recT)}</div></div>
   </div>
-  ${atras.length?`<h2>Já deveria ter caído</h2>${atras.map(g=>card(g,true)).join("")}`:""}
-  <h2>Próximos pagamentos</h2>
-  ${fut.length?fut.map(g=>card(g,false)).join(""):`<div class="card small">Nenhum pagamento previsto.</div>`}
-  ${recebidos.length?`<details><summary>Recebidos (${recebidos.length})</summary>${recebidos.map(g=>`<div class="card"><div class="pay-h"><span class="d">${fData(g.data)}<span class="tag done">✓ recebido</span></span><span class="t">${R(g.total)}</span></div><div class="row-btns"><button class="link" data-act="desfazer" data-d="${g.data}">Desfazer</button></div></div>`).join("")}</details>`:""}`;
+  <h3 class="sec">Produção</h3>
+  <div class="card">${prod.length?prod.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):`<div class="small">Nada produzido neste mês.</div>`}</div>
+  <h3 class="sec">Recebimentos</h3>
+  ${rec.length?rec.map(g=>`<div class="card">
+    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}</span><span class="t">${R(g.total)}</span></div>
+    <ul class="items">${Object.values(g.itens).map(i=>`<li><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}</span><b>${R(i.valor)}</b></li>`).join("")}</ul></div>`).join(""):`<div class="card small">Nenhum pagamento neste mês.</div>`}`;
 }
+// mês em que cada lançamento "conta": eletivos pelo fim do período (21 a 20), o resto pelo mês da data
+const mesProducao = e => (e.tipo==="eletivo"||e.tipo==="fechamento") ? periodoEletivo(e.data).fim.slice(0,7) : e.data.slice(0,7);
+function mesesDisponiveis(){
+  const s=new Set([hojeStr().slice(0,7)]);
+  for(const e of S.entries){s.add(mesProducao(e));for(const q of parcelas(e))s.add(q.data.slice(0,7));}
+  return [...s].sort();
+}
+function producaoMes(k){
+  const g={};
+  for(const e of S.entries){
+    if(mesProducao(e)!==k) continue;
+    const ele=e.tipo==="eletivo"||e.tipo==="fechamento", key=ele?"eletivo":e.tipo;
+    let it=g[key];
+    if(!it){
+      const pe=ele?periodoEletivo(e.data):null;
+      it=g[key]={key,nome:ele?"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim):TIPOS[e.tipo].nome,valor:0,qtd:0,pags:new Set()};
+    }
+    it.valor+=valorEntrada(e);
+    it.qtd+=e.tipo==="fechamento"?0:(e.qtd||1);
+    parcelas(e).forEach(q=>it.pags.add(q.data));
+  }
+  return ["eletivo","turno","urgencia","sob_noturno","sob_fds","sob_feriado"].filter(k=>g[k]).map(k=>g[k]);
+}
+const unid = i => i.key==="eletivo"||i.key==="urgencia" ? (i.qtd===1?"exame":"exames") : i.key==="turno" ? (i.qtd===1?"turno":"turnos") : (i.qtd===1?"plantão":"plantões");
+const nomeMes = k => {const p=parse(k+"-01");return MESES[p.m]+" de "+p.y;};
+const abrevMes = k => {const p=parse(k+"-01");return MESES[p.m].slice(0,3)+"/"+String(p.y).slice(2);};
 
 function rascunho(){
   const c=S.config, base={tipo:L.tipo,data:L.data};
@@ -384,6 +410,8 @@ function render(){
   $("#hoje").textContent=fData(hojeStr());
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
   $("#app").innerHTML = tab==="resumo"?vResumo():tab==="lancar"?vLancar():tab==="producao"?vProducao():vAjustes();
+  const on=document.querySelector(".mtab.on"), bar=on&&on.parentElement;
+  if(on) bar.scrollLeft = on.offsetLeft - bar.offsetLeft - (bar.clientWidth-on.offsetWidth)/2;
 }
 function $(s){return document.querySelector(s);}
 let tt;
@@ -408,8 +436,7 @@ $("#app").addEventListener("click",ev=>{
     if(e&&confirm("Apagar \""+rotulo(e)+"\" de "+fData(e.data)+"?")){S.entries=S.entries.filter(x=>x.id!==id);save();render();toast("Lançamento apagado");}
     return;
   }
-  if(a==="receber"){S.recebidos[b.dataset.d]=true;save();render();toast("Marcado como recebido");return;}
-  if(a==="desfazer"){delete S.recebidos[b.dataset.d];save();render();return;}
+  if(a==="mes"){mesSel=b.dataset.k;return render();}
   if(a==="addpreco"){S.precos.push({id:uid(),mod:b.dataset.m,nome:"Novo exame "+b.dataset.m,valor:0});save();render();return;}
   if(a==="delpreco"){const p=S.precos.find(x=>x.id===id);if(p&&confirm("Remover \""+p.nome+"\" da tabela?")){S.precos=S.precos.filter(x=>x.id!==id);save();render();}return;}
   if(a==="exportar") return exportar();
