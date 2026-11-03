@@ -49,7 +49,9 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 .items li{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:5px 0;border-top:1px dashed var(--line);color:var(--muted)}
 .items li b{color:var(--ink);font-weight:550;white-space:nowrap}
 .late{border-color:var(--warn);background:var(--warn-soft)}
-.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:6px;vertical-align:middle}
+.tag{display:inline-block;font-size:12px;font-weight:550;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:8px;vertical-align:middle}
+.tag.wait{background:var(--brand-soft);color:var(--brand)}
+.tag.done{background:var(--ok-soft);color:var(--ok)}
 .row-btns{display:flex;gap:8px;margin-top:10px}
 .btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:550}
 .btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
@@ -246,9 +248,9 @@ function vResumo(){
   const fixos=S.entries.filter(e=>e.tipo!=="eletivo"&&e.tipo!=="fechamento"&&e.data.slice(0,7)===hoje.slice(0,7));
   const fixV=fixos.reduce((s,e)=>s+valorEntrada(e),0);
   const card = (g,late) => `<div class="card${late?" late":""}">
-    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}${late?'<span class="tag">confirmar</span>':""}</span><span class="t">${R(g.total)}</span></div>
+    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}<span class="tag ${late?"":"wait"}">${late?"confirmar":"a receber"}</span></span><span class="t">${R(g.total)}</span></div>
     <ul class="items">${Object.values(g.itens).map(i=>`<li><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}</span><b>${R(i.valor)}</b></li>`).join("")}</ul>
-    <div class="row-btns"><button class="btn ok" data-act="receber" data-d="${g.data}">✓ Já recebi</button></div></div>`;
+    <div class="row-btns"><button class="btn" data-act="receber" data-d="${g.data}">Marcar como recebido</button></div></div>`;
   const recebidos=pg.filter(g=>S.recebidos[g.data]).reverse();
   return `
   <div class="card hero">
@@ -263,7 +265,7 @@ function vResumo(){
   ${atras.length?`<h2>Já deveria ter caído</h2>${atras.map(g=>card(g,true)).join("")}`:""}
   <h2>Próximos pagamentos</h2>
   ${fut.length?fut.map(g=>card(g,false)).join(""):`<div class="card small">Nenhum pagamento previsto.</div>`}
-  ${recebidos.length?`<details><summary>Recebidos (${recebidos.length})</summary>${recebidos.map(g=>`<div class="card"><div class="pay-h"><span class="d">${fData(g.data)}</span><span class="t">${R(g.total)}</span></div><div class="row-btns"><button class="link" data-act="desfazer" data-d="${g.data}">Desfazer</button></div></div>`).join("")}</details>`:""}`;
+  ${recebidos.length?`<details><summary>Recebidos (${recebidos.length})</summary>${recebidos.map(g=>`<div class="card"><div class="pay-h"><span class="d">${fData(g.data)}<span class="tag done">✓ recebido</span></span><span class="t">${R(g.total)}</span></div><div class="row-btns"><button class="link" data-act="desfazer" data-d="${g.data}">Desfazer</button></div></div>`).join("")}</details>`:""}`;
 }
 
 function rascunho(){
