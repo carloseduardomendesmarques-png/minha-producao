@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Minha Produção</title>
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Produção">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#f4f6f8; --card:#ffffff; --ink:#14212b; --muted:#5d6b78; --line:#e2e7ec;
+  --brand:#0f766e; --brand-ink:#ffffff; --brand-soft:#e3f3f1;
+  --warn:#b45309; --warn-soft:#fdf2e3; --ok:#15803d; --ok-soft:#e5f5ea; --danger:#b91c1c;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1419; --card:#172028; --ink:#e7edf2; --muted:#94a3b0; --line:#26323d;
+    --brand:#2bb3a5; --brand-ink:#04211e; --brand-soft:#123331;
+    --warn:#f0a44b; --warn-soft:#352717; --ok:#4ade80; --ok-soft:#14301d; --danger:#f87171;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+button,input,select{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--brand);color:var(--brand-ink);padding:calc(14px + env(safe-area-inset-top)) 16px 14px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.top h1{font-size:20px;margin:0;font-weight:650}
+.top .sub{font-size:13px;opacity:.85}
+main{max-width:640px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.hero{background:var(--brand);color:var(--brand-ink);border:none}
+.hero .lbl{opacity:.85;font-size:14px}
+.hero .big{font-size:32px;font-weight:700;letter-spacing:-.5px;margin:2px 0 8px}
+.hero .next{font-size:14px;opacity:.95}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.grid2 .card{margin:0}
+.lbl{font-size:13px;color:var(--muted)}
+.val{font-size:20px;font-weight:650;margin-top:2px}
+.small{font-size:13px;color:var(--muted)}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:20px 4px 8px;font-weight:600}
+.pay-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pay-h .d{font-weight:650}
+.pay-h .t{font-weight:700;font-size:18px}
+.items{margin:8px 0 0;padding:0;list-style:none}
+.items li{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:5px 0;border-top:1px dashed var(--line);color:var(--muted)}
+.items li b{color:var(--ink);font-weight:550;white-space:nowrap}
+.late{border-color:var(--warn);background:var(--warn-soft)}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:6px;vertical-align:middle}
+.row-btns{display:flex;gap:8px;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:550}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.ok{background:var(--ok-soft);border-color:transparent;color:var(--ok)}
+.btn.full{width:100%}
+.btn:disabled{opacity:.45;cursor:default}
+.link{background:none;border:none;color:var(--brand);cursor:pointer;padding:4px;font-weight:550}
+details summary{cursor:pointer;color:var(--muted);padding:8px 4px;font-size:14px}
+.chips{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:10px;text-align:left;cursor:pointer;font-size:14px;line-height:1.25}
+.chip small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.chip.on{border-color:var(--brand);background:var(--brand-soft);box-shadow:inset 0 0 0 1px var(--brand)}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.field label{font-size:13px;color:var(--muted)}
+input[type=date],input[type=text],input[type=number],input[inputmode],select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);min-height:44px}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:10px}
+.seg button{flex:1;border:none;background:none;padding:8px;border-radius:8px;cursor:pointer;font-weight:550;color:var(--muted)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+.ex{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.ex:first-child{border-top:none}
+.ex .n{flex:1;min-width:0;font-size:14px}
+.ex .n small{display:block;color:var(--muted)}
+.ex.has .n{font-weight:600}
+.step{display:flex;align-items:center;gap:4px}
+.step button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:20px;cursor:pointer;line-height:1}
+.step .q{min-width:28px;text-align:center;font-weight:650}
+.bar{position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);margin-top:12px}
+.bar .t{font-weight:700}
+.info{background:var(--brand-soft);border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+.ent{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.ent .x{border:none;background:none;color:var(--danger);font-size:18px;cursor:pointer;padding:4px 8px}
+.ent .v{font-weight:600;white-space:nowrap}
+.day{font-size:13px;color:var(--muted);margin-top:10px;font-weight:600}
+.mhead{display:flex;justify-content:space-between;align-items:baseline}
+.mhead b{font-size:16px}
+.prow{display:grid;grid-template-columns:1fr 92px 40px;gap:6px;margin-bottom:6px}
+.prow input{min-height:40px;padding:8px 10px;font-size:14px}
+.prow .x{border:none;background:none;color:var(--danger);font-size:18px;cursor:pointer}
+.cfg{display:grid;grid-template-columns:1fr 110px;gap:8px 10px;align-items:center;font-size:14px}
+.cfg input{min-height:40px;padding:8px 10px}
+.empty{text-align:center;padding:28px 16px;color:var(--muted)}
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;border:none;background:none;padding:8px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;color:var(--muted);cursor:pointer}
+.tabs button svg{width:24px;height:24px}
+.tabs button.on{color:var(--brand);font-weight:650}
+#toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:9;max-width:calc(100% - 32px)}
+#toast.show{opacity:1;transform:translateX(-50%)}
+</style>
+</head>
+<body>
+<header class="top"><h1 id="titulo">Resumo</h1><span class="sub" id="hoje"></span></header>
+<main id="app"></main>
+<div id="toast"></div>
+<nav class="tabs" id="tabs">
+  <button data-tab="resumo" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>Resumo</button>
+  <button data-tab="lancar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Lançar</button>
+  <button data-tab="producao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Produção</button>
+  <button data-tab="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Ajustes</button>
+</nav>
+<script>
+"use strict";
+// ---------- valores padrão ----------
+const DEF_CFG = {
+  turnoP1: 200,      // parcela do turno paga no mês seguinte
+  turnoP2: 150,      // parcela do turno paga no segundo mês
+  urgencia: 90,      // por exame de urgência / internado USG
+  sobNoturno: 450,
+  sobFds: 450,
+  sobFeriado: 500,
+  diaMesSeguinte: 15, // eletivos + 1ª parcela do turno
+  diaFixos: 30        // sobreavisos, urgências, 2ª parcela do turno
+};
+const DEF_PRECOS = [
+  ["USG","US - Abdome total",55.39],
+  ["USG","US - Doppler de órgão ou estrutura",53.75],
+  ["USG","US - Abdome superior",41.54],
+  ["USG","US - Transvaginal (útero, ovário, anexos)",41.54],
+  ["USG","US - Tireoide",36.92],
+  ["USG","US - Mamas",36.92],
+  ["USG","US - Axilas",36.92],
+  ["USG","US - Aparelho urinário",36.92],
+  ["USG","US - Abdome inferior masculino",36.92],
+  ["USG","US - Abdome inferior feminino",36.92],
+  ["USG","US - Parede abdominal",36.92],
+  ["USG","US - Região inguinal",36.92],
+  ["USG","US - Testículos",36.92],
+  ["USG","US - Pélvica",36.92]
+].map(([mod,nome,valor],i)=>({id:"p"+i,mod,nome,valor}));
+
+const TIPOS = {
+  eletivo:     {nome:"Eletivos",                  dica:"USG / TC da agenda"},
+  urgencia:    {nome:"Urgência / internado",      dica:"USG · por exame"},
+  turno:       {nome:"Turno 6h",                  dica:"Meio de semana"},
+  sob_noturno: {nome:"Sobreaviso noturno",        dica:"USG"},
+  sob_fds:     {nome:"Sobreaviso fim de semana",  dica:"USG"},
+  sob_feriado: {nome:"Sobreaviso feriado",        dica:"12h"},
+  fechamento:  {nome:"Total de período",          dica:"Eletivos já fechados"}
+};
+const FIXO_CFG = {sob_noturno:"sobNoturno", sob_fds:"sobFds", sob_feriado:"sobFeriado"};
+
+// ---------- utilitários de data e valor ----------
+const pad = n => String(n).padStart(2,"0");
+const MESES = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const DIAS = ["dom","seg","ter","qua","qui","sex","sáb"];
+// aceita mês fora de 0..11 e limita o dia ao fim do mês (dia 30 em fevereiro vira 28/29)
+function ymd(y,m,d){const b=new Date(y,m,1),Y=b.getFullYear(),M=b.getMonth(),u=new Date(Y,M+1,0).getDate();return Y+"-"+pad(M+1)+"-"+pad(Math.min(d,u));}
+function parse(s){const [a,b,c]=s.split("-").map(Number);return {y:a,m:b-1,d:c};}
+function hojeStr(){const t=new Date();return ymd(t.getFullYear(),t.getMonth(),t.getDate());}
+function fData(s){const p=parse(s);return pad(p.d)+"/"+pad(p.m+1)+"/"+p.y;}
+function fCurta(s){const p=parse(s);return pad(p.d)+"/"+pad(p.m+1);}
+function fDow(s){const p=parse(s);return DIAS[new Date(p.y,p.m,p.d).getDay()];}
+function fMes(y,m){const b=new Date(y,m,1);return MESES[b.getMonth()]+"/"+b.getFullYear();}
+const R = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+// "2.793,59" e "2793,59" viram 2793.59; "2793.59" também é aceito
+const toNum = v => {let s=String(v).trim();if(s.includes(","))s=s.replace(/\./g,"").replace(",",".");const n=parseFloat(s);return isFinite(n)?n:0;};
+const toNumSimples = v => {const n=parseFloat(String(v).replace(",","."));return isFinite(n)?n:0;};
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+// ---------- estado ----------
+const KEY = "minha-producao-v1";
+let S;
+function load(){
+  let d=null;
+  try{d=JSON.parse(localStorage.getItem(KEY));}catch(e){}
+  S = Object.assign({entries:[],recebidos:{},config:{},precos:DEF_PRECOS.map(p=>({...p}))}, d||{});
+  S.config = Object.assign({...DEF_CFG}, S.config);
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(S));}
+  catch(e){toast("Não foi possível salvar neste navegador");}
+}
+
+// ---------- regras de pagamento ----------
+// período dos eletivos: dia 21 até dia 20 do mês seguinte; paga no dia 15 do mês após o fechamento
+function periodoEletivo(s){
+  const p=parse(s), fimM = p.d>=21 ? p.m+1 : p.m;
+  return {ini:ymd(p.y,fimM-1,21), fim:ymd(p.y,fimM,20), pag:ymd(p.y,fimM+1,S.config.diaMesSeguinte)};
+}
+function parcelas(e){
+  const p=parse(e.data), c=S.config, mes=fMes(p.y,p.m), fix=ymd(p.y,p.m+2,c.diaFixos);
+  switch(e.tipo){
+    case "eletivo":
+    case "fechamento":{
+      const pe=periodoEletivo(e.data);
+      const valor = e.tipo==="eletivo" ? e.qtd*e.valorUnit : e.valor;
+      return [{data:pe.pag, valor, grupo:"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim), qtd:e.tipo==="eletivo"?e.qtd:0}];
+    }
+    case "turno":
+      return [
+        {data:ymd(p.y,p.m+1,c.diaMesSeguinte), valor:e.p1, grupo:"Turnos de "+mes+" (1ª parcela)", qtd:1},
+        {data:fix, valor:e.p2, grupo:"Turnos de "+mes+" (2ª parcela)", qtd:1}
+      ];
+    case "urgencia":
+      return [{data:fix, valor:e.qtd*e.valorUnit, grupo:"Urgências/internados de "+mes, qtd:e.qtd}];
+    default:
+      return [{data:fix, valor:e.valor, grupo:TIPOS[e.tipo].nome+" de "+mes, qtd:1}];
+  }
+}
+const valorEntrada = e => parcelas(e).reduce((s,q)=>s+q.valor,0);
+function pagamentos(){
+  const m={};
+  for(const e of S.entries) for(const q of parcelas(e)){
+    const g = m[q.data] || (m[q.data]={data:q.data,total:0,itens:{}});
+    g.total += q.valor;
+    const it = g.itens[q.grupo] || (g.itens[q.grupo]={grupo:q.grupo,valor:0,qtd:0});
+    it.valor += q.valor; it.qtd += q.qtd;
+  }
+  return Object.values(m).sort((a,b)=>a.data<b.data?-1:1);
+}
+function rotulo(e){
+  switch(e.tipo){
+    case "eletivo": return e.exame+(e.qtd>1?" ×"+e.qtd:"");
+    case "urgencia": return "Urgência/internado ×"+e.qtd;
+    case "fechamento": {const pe=periodoEletivo(e.data);return "Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim)+" (total)";}
+    default: return TIPOS[e.tipo].nome;
+  }
+}
+
+// ---------- telas ----------
+let tab = "resumo";
+const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", cont:{}, qtd:1, valor:""};
+
+function vResumo(){
+  const hoje=hojeStr(), pg=pagamentos();
+  if(!S.entries.length) return `<div class="card empty"><p><b>Nada lançado ainda.</b></p><p>Lance seus exames, turnos e sobreavisos e o app calcula quanto e quando você vai receber.</p><button class="btn pri" data-act="go" data-tab="lancar">Fazer o primeiro lançamento</button></div>`;
+  const pend=pg.filter(g=>!S.recebidos[g.data]);
+  const atras=pend.filter(g=>g.data<hoje), fut=pend.filter(g=>g.data>=hoje);
+  const totalPend=pend.reduce((s,g)=>s+g.total,0);
+  const pe=periodoEletivo(hoje);
+  const ele=S.entries.filter(e=>e.tipo==="eletivo"&&e.data>=pe.ini&&e.data<=pe.fim);
+  const eleV=ele.reduce((s,e)=>s+e.qtd*e.valorUnit,0), eleQ=ele.reduce((s,e)=>s+e.qtd,0);
+  const p=parse(hoje), mesTxt=MESES[p.m];
+  const fixos=S.entries.filter(e=>e.tipo!=="eletivo"&&e.tipo!=="fechamento"&&e.data.slice(0,7)===hoje.slice(0,7));
+  const fixV=fixos.reduce((s,e)=>s+valorEntrada(e),0);
+  const card = (g,late) => `<div class="card${late?" late":""}">
+    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}${late?'<span class="tag">confirmar</span>':""}</span><span class="t">${R(g.total)}</span></div>
+    <ul class="items">${Object.values(g.itens).map(i=>`<li><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}</span><b>${R(i.valor)}</b></li>`).join("")}</ul>
+    <div class="row-btns"><button class="btn ok" data-act="receber" data-d="${g.data}">✓ Já recebi</button></div></div>`;
+  const recebidos=pg.filter(g=>S.recebidos[g.data]).reverse();
+  return `
+  <div class="card hero">
+    <div class="lbl">Total a receber</div>
+    <div class="big">${R(totalPend)}</div>
+    <div class="next">${fut.length?`Próximo: <b>${R(fut[0].total)}</b> em ${fData(fut[0].data)}`:"Nenhum pagamento futuro"}</div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="lbl">Eletivos ${fCurta(pe.ini)} a ${fCurta(pe.fim)}</div><div class="val">${R(eleV)}</div><div class="small">${eleQ} exame${eleQ===1?"":"s"} · paga ${fCurta(pe.pag)}</div></div>
+    <div class="card"><div class="lbl">Turnos e plantões de ${mesTxt}</div><div class="val">${R(fixV)}</div><div class="small">${fixos.length} lançamento${fixos.length===1?"":"s"}</div></div>
+  </div>
+  ${atras.length?`<h2>Já deveria ter caído</h2>${atras.map(g=>card(g,true)).join("")}`:""}
+  <h2>Próximos pagamentos</h2>
+  ${fut.length?fut.map(g=>card(g,false)).join(""):`<div class="card small">Nenhum pagamento previsto.</div>`}
+  ${recebidos.length?`<details><summary>Recebidos (${recebidos.length})</summary>${recebidos.map(g=>`<div class="card"><div class="pay-h"><span class="d">${fData(g.data)}</span><span class="t">${R(g.total)}</span></div><div class="row-btns"><button class="link" data-act="desfazer" data-d="${g.data}">Desfazer</button></div></div>`).join("")}</details>`:""}`;
+}
+
+function rascunho(){
+  const c=S.config, base={tipo:L.tipo,data:L.data};
+  if(L.tipo==="turno") return {...base,p1:c.turnoP1,p2:c.turnoP2};
+  if(L.tipo==="urgencia") return {...base,qtd:L.qtd,valorUnit:c.urgencia};
+  if(FIXO_CFG[L.tipo]) return {...base,valor:c[FIXO_CFG[L.tipo]]};
+  if(L.tipo==="fechamento") return {...base,valor:toNum(L.valor)};
+  return null;
+}
+function previsao(e){
+  return parcelas(e).map(q=>`<b>${R(q.valor)}</b> em ${fData(q.data)}`).join(" + ");
+}
+function vLancar(){
+  const c=S.config;
+  const chips=Object.entries(TIPOS).map(([k,t])=>`<button class="chip${L.tipo===k?" on":""}" data-act="tipo" data-t="${k}">${t.nome}<small>${t.dica}</small></button>`).join("");
+  let corpo="";
+  if(L.tipo==="eletivo"){
+    const lista=S.precos.filter(p=>p.mod===L.mod);
+    let q=0,v=0;
+    for(const p of lista){const n=L.cont[p.id]||0;q+=n;v+=n*p.valor;}
+    const pe=periodoEletivo(L.data);
+    corpo=`<div class="seg">${["USG","TC"].map(m=>`<button class="${L.mod===m?"on":""}" data-act="mod" data-m="${m}">${m}</button>`).join("")}</div>
+    <div class="info">Período ${fData(pe.ini)} a ${fData(pe.fim)} · pago em <b>${fData(pe.pag)}</b></div>
+    <div class="card">${lista.length?lista.map(p=>{const n=L.cont[p.id]||0;return `<div class="ex${n?" has":""}"><div class="n">${esc(p.nome)}<small>${R(p.valor)}</small></div><div class="step"><button data-act="menos" data-id="${p.id}" aria-label="Menos">−</button><span class="q">${n}</span><button data-act="mais" data-id="${p.id}" aria-label="Mais">+</button></div></div>`;}).join(""):`<div class="small">Nenhum exame de ${L.mod} cadastrado. Inclua os exames e valores em <button class="link" data-act="go" data-tab="ajustes">Ajustes</button>.</div>`}</div>
+    <div class="bar"><div><div class="t">${R(v)}</div><div class="small">${q} exame${q===1?"":"s"}</div></div><button class="btn pri" data-act="salvar" ${q?"":"disabled"}>Salvar</button></div>`;
+  } else if(L.tipo==="urgencia"){
+    const e=rascunho();
+    corpo=`<div class="card"><div class="ex"><div class="n">Exames de urgência / internados<small>${R(c.urgencia)} cada</small></div><div class="step"><button data-act="qmenos">−</button><span class="q">${L.qtd}</span><button data-act="qmais">+</button></div></div></div>
+    <div class="info">${previsao(e)}</div>
+    <button class="btn pri full" data-act="salvar">Salvar ${R(e.qtd*e.valorUnit)}</button>`;
+  } else if(L.tipo==="fechamento"){
+    const pe=periodoEletivo(L.data);
+    corpo=`<div class="info">Use para lançar o total de um período de eletivos já fechado (por exemplo, o valor de um relatório do hospital). A data escolhida acima define o período: <b>${fData(pe.ini)} a ${fData(pe.fim)}</b>, pago em <b>${fData(pe.pag)}</b>.</div>
+    <div class="field"><label for="fval">Valor total do período (R$)</label><input id="fval" inputmode="decimal" placeholder="0,00" value="${esc(L.valor)}"></div>
+    <button class="btn pri full" data-act="salvar">Salvar</button>`;
+  } else {
+    const e=rascunho();
+    corpo=`<div class="info">${TIPOS[L.tipo].nome}: ${previsao(e)}</div>
+    <button class="btn pri full" data-act="salvar">Salvar ${R(valorEntrada(e))}</button>`;
+  }
+  const doDia=S.entries.filter(e=>e.data===L.data);
+  return `<div class="field"><label for="ldata">Data</label><input type="date" id="ldata" value="${L.data}"></div>
+  <div class="chips">${chips}</div>
+  <h2>${TIPOS[L.tipo].nome}</h2>
+  ${corpo}
+  ${doDia.length?`<h2>Lançado em ${fData(L.data)}</h2><div class="card">${doDia.map(entLinha).join("")}</div>`:""}`;
+}
+function entLinha(e){
+  return `<div class="ent"><span>${esc(rotulo(e))}</span><span><span class="v">${R(valorEntrada(e))}</span><button class="x" data-act="apagar" data-id="${e.id}" aria-label="Apagar">×</button></span></div>`;
+}
+
+function vProducao(){
+  if(!S.entries.length) return `<div class="card empty">Nenhum lançamento ainda.</div>`;
+  // eletivos por período (para conferir com o relatório do hospital)
+  const per={};
+  for(const e of S.entries) if(e.tipo==="eletivo"||e.tipo==="fechamento"){
+    const pe=periodoEletivo(e.data), k=pe.fim;
+    const g=per[k]||(per[k]={pe,q:0,v:0});
+    g.q += e.tipo==="eletivo"?e.qtd:0; g.v += valorEntrada(e);
+  }
+  const perL=Object.values(per).sort((a,b)=>a.pe.fim<b.pe.fim?1:-1);
+  // lançamentos por mês e dia
+  const meses={};
+  for(const e of [...S.entries].sort((a,b)=>a.data<b.data?1:a.data>b.data?-1:0)){
+    const k=e.data.slice(0,7);
+    (meses[k]||(meses[k]=[])).push(e);
+  }
+  return `${perL.length?`<h2>Eletivos por período</h2><div class="card">${perL.map(g=>`<div class="ent"><span>${fCurta(g.pe.ini)} a ${fCurta(g.pe.fim)}<br><span class="small">${g.q?g.q+" exames · ":""}paga ${fData(g.pe.pag)}</span></span><span class="v">${R(g.v)}</span></div>`).join("")}</div>`:""}
+  <h2>Lançamentos</h2>
+  ${Object.entries(meses).map(([k,lst])=>{
+    const p=parse(k+"-01"), tot=lst.reduce((s,e)=>s+valorEntrada(e),0);
+    let dia="", html="";
+    for(const e of lst){
+      if(e.data!==dia){dia=e.data;html+=`<div class="day">${fData(dia)} · ${fDow(dia)}</div>`;}
+      html+=entLinha(e);
+    }
+    return `<div class="card"><div class="mhead"><b>${fMes(p.y,p.m)}</b><span class="v">${R(tot)}</span></div>${html}</div>`;
+  }).join("")}`;
+}
+
+function vAjustes(){
+  const c=S.config;
+  const linha=(k,txt)=>`<label for="c_${k}">${txt}</label><input id="c_${k}" data-cfg="${k}" inputmode="decimal" value="${String(c[k]).replace(".",",")}">`;
+  const tabela=m=>`<h2>Exames ${m}</h2><div class="card">
+    ${S.precos.filter(p=>p.mod===m).map(p=>`<div class="prow"><input data-pn="${p.id}" value="${esc(p.nome)}" aria-label="Nome do exame"><input data-pv="${p.id}" inputmode="decimal" value="${p.valor.toFixed(2).replace(".",",")}" aria-label="Valor"><button class="x" data-act="delpreco" data-id="${p.id}" aria-label="Remover">×</button></div>`).join("")||`<div class="small" style="margin-bottom:8px">Nenhum exame cadastrado.</div>`}
+    <button class="link" data-act="addpreco" data-m="${m}">+ Adicionar exame ${m}</button></div>`;
+  return `<h2>Valores fixos (R$)</h2>
+  <div class="card cfg">
+    ${linha("turnoP1","Turno 6h: 1ª parcela")}
+    ${linha("turnoP2","Turno 6h: 2ª parcela")}
+    ${linha("urgencia","Urgência / internado (por exame)")}
+    ${linha("sobNoturno","Sobreaviso noturno")}
+    ${linha("sobFds","Sobreaviso fim de semana")}
+    ${linha("sobFeriado","Sobreaviso feriado 12h")}
+  </div>
+  <h2>Dias de pagamento</h2>
+  <div class="card cfg">
+    ${linha("diaMesSeguinte","Mês seguinte: eletivos e 1ª parcela do turno")}
+    ${linha("diaFixos","Segundo mês: sobreavisos, urgências e 2ª parcela")}
+  </div>
+  <p class="small" style="margin:0 4px">Mudanças nos valores só valem para lançamentos novos. Os já lançados mantêm o valor da época.</p>
+  ${tabela("USG")}${tabela("TC")}
+  <h2>Backup</h2>
+  <div class="card">
+    <p class="small" style="margin-top:0">Os dados ficam salvos só neste aparelho e navegador. Faça backup de vez em quando ou para passar para outro aparelho.</p>
+    <div class="row-btns"><button class="btn" data-act="exportar">Baixar backup</button><button class="btn" data-act="importar">Restaurar backup</button></div>
+    <input type="file" id="arq" accept="application/json,.json" hidden>
+  </div>`;
+}
+
+// ---------- render e eventos ----------
+const TITULOS={resumo:"Resumo",lancar:"Lançar",producao:"Produção",ajustes:"Ajustes"};
+function render(){
+  $("#titulo").textContent=TITULOS[tab];
+  $("#hoje").textContent=fData(hojeStr());
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
+  $("#app").innerHTML = tab==="resumo"?vResumo():tab==="lancar"?vLancar():tab==="producao"?vProducao():vAjustes();
+}
+function $(s){return document.querySelector(s);}
+let tt;
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("show"),2200);}
+function go(t){tab=t;render();window.scrollTo(0,0);}
+
+$("#tabs").addEventListener("click",ev=>{const b=ev.target.closest("button");if(b)go(b.dataset.tab);});
+
+$("#app").addEventListener("click",ev=>{
+  const b=ev.target.closest("[data-act]"); if(!b) return;
+  const a=b.dataset.act, id=b.dataset.id;
+  if(a==="go") return go(b.dataset.tab);
+  if(a==="tipo"){L.tipo=b.dataset.t;L.qtd=1;return render();}
+  if(a==="mod"){L.mod=b.dataset.m;return render();}
+  if(a==="mais"){L.cont[id]=(L.cont[id]||0)+1;return render();}
+  if(a==="menos"){L.cont[id]=Math.max(0,(L.cont[id]||0)-1);return render();}
+  if(a==="qmais"){L.qtd++;return render();}
+  if(a==="qmenos"){L.qtd=Math.max(1,L.qtd-1);return render();}
+  if(a==="salvar") return salvar();
+  if(a==="apagar"){
+    const e=S.entries.find(x=>x.id===id);
+    if(e&&confirm("Apagar \""+rotulo(e)+"\" de "+fData(e.data)+"?")){S.entries=S.entries.filter(x=>x.id!==id);save();render();toast("Lançamento apagado");}
+    return;
+  }
+  if(a==="receber"){S.recebidos[b.dataset.d]=true;save();render();toast("Marcado como recebido");return;}
+  if(a==="desfazer"){delete S.recebidos[b.dataset.d];save();render();return;}
+  if(a==="addpreco"){S.precos.push({id:uid(),mod:b.dataset.m,nome:"Novo exame "+b.dataset.m,valor:0});save();render();return;}
+  if(a==="delpreco"){const p=S.precos.find(x=>x.id===id);if(p&&confirm("Remover \""+p.nome+"\" da tabela?")){S.precos=S.precos.filter(x=>x.id!==id);save();render();}return;}
+  if(a==="exportar") return exportar();
+  if(a==="importar") return $("#arq").click();
+});
+
+$("#app").addEventListener("change",ev=>{
+  const el=ev.target;
+  if(el.id==="ldata"&&el.value){L.data=el.value;return render();}
+  if(el.dataset.cfg){
+    const k=el.dataset.cfg, v=toNumSimples(el.value);
+    S.config[k] = k.startsWith("dia") ? Math.min(31,Math.max(1,Math.round(v)||1)) : v;
+    save();toast("Salvo");return;
+  }
+  if(el.dataset.pn){const p=S.precos.find(x=>x.id===el.dataset.pn);if(p){p.nome=el.value.trim()||p.nome;save();toast("Salvo");}return;}
+  if(el.dataset.pv){const p=S.precos.find(x=>x.id===el.dataset.pv);if(p){p.valor=toNumSimples(el.value);save();toast("Salvo");}return;}
+  if(el.id==="arq"&&el.files[0]) return importar(el.files[0]);
+});
+$("#app").addEventListener("input",ev=>{if(ev.target.id==="fval")L.valor=ev.target.value;});
+
+function salvar(){
+  if(L.tipo==="eletivo"){
+    let n=0;
+    for(const p of S.precos.filter(p=>p.mod===L.mod)){
+      const q=L.cont[p.id]||0; if(!q) continue;
+      S.entries.push({id:uid(),tipo:"eletivo",data:L.data,mod:p.mod,exame:p.nome,qtd:q,valorUnit:p.valor});
+      n+=q;
+    }
+    if(!n) return;
+    L.cont={};
+    save();render();toast(n+" exame"+(n===1?"":"s")+" lançado"+(n===1?"":"s"));
+    return;
+  }
+  const e=rascunho();
+  if(L.tipo==="fechamento"&&!(e.valor>0)){toast("Informe o valor do período");return;}
+  e.id=uid();
+  S.entries.push(e);
+  L.qtd=1;L.valor="";
+  save();render();toast(TIPOS[e.tipo].nome+" lançado: "+R(valorEntrada(e)));
+}
+
+function exportar(){
+  const blob=new Blob([JSON.stringify(S,null,1)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="minha-producao-backup-"+hojeStr()+".json";
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importar(f){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!Array.isArray(d.entries)) throw 0;
+      if(!confirm("Substituir os dados deste aparelho pelo backup ("+d.entries.length+" lançamentos)?")) return;
+      try{localStorage.setItem(KEY,JSON.stringify(d));}catch(e){}
+      S=d;load();save();render();toast("Backup restaurado");
+    }catch(e){toast("Arquivo de backup inválido");}
+  };
+  r.readAsText(f);
+}
+
+load();
+render();
+</script>
+</body>
+</html>
