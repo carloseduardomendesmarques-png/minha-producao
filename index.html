@@ -50,6 +50,7 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 .items li b{color:var(--ink);font-weight:550;white-space:nowrap}
 .late{border-color:var(--warn);background:var(--warn-soft)}
 .tag{display:inline-block;font-size:12px;font-weight:550;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:8px;vertical-align:middle}
+.dias{color:var(--ink);font-weight:550}
 .hero .split{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:14px;opacity:.95}
 .mtabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
 .mtabs::-webkit-scrollbar{display:none}
@@ -251,16 +252,18 @@ function vResumo(){
   for(const e of S.entries) for(const q of parcelas(e)){
     if(q.data.slice(0,7)!==mesSel) continue;
     const b=rec[CAT[e.tipo]], k=q.data+"|"+q.grupo;
-    const it=b[k]||(b[k]={data:q.data,grupo:q.grupo,valor:0,qtd:0});
-    it.valor+=q.valor; it.qtd+=q.qtd;
+    const it=b[k]||(b[k]={data:q.data,grupo:q.grupo,valor:0,qtd:0,dias:new Set()});
+    it.valor+=q.valor; it.qtd+=q.qtd; it.dias.add(e.data);
   }
   const soma=a=>a.reduce((s,i)=>s+i.valor,0);
   const ordenar=o=>Object.values(o).sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
   const rf=ordenar(rec.fixo), rp=ordenar(rec.producao), rfT=soma(rf), rpT=soma(rp);
   const prod=producaoMes(mesSel), pf=prod.filter(i=>CAT[i.key]==="fixo"), pp=prod.filter(i=>CAT[i.key]==="producao");
   const vazio=`<div class="small" style="margin-top:6px">Nada neste mês.</div>`;
-  const recCard=(titulo,a,t)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(t)}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}<br><span class="small">${fData(i.data)} · ${fDow(i.data)}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
-  const prodCard=(titulo,a)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(soma(a))}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  // nos fixos, mostra os dias em que os plantões foram feitos
+  const dias=i=>`<span class="dias">${[...i.dias].sort().map(d=>fCurta(d)+" "+fDow(d)).join(" · ")}</span><br>`;
+  const recCard=(titulo,a,t,fixo)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(t)}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}<br><span class="small">${fixo?dias(i)+"paga ":""}${fData(i.data)} · ${fDow(i.data)}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  const prodCard=(titulo,a,fixo)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(soma(a))}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">${fixo?dias(i):""}paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
   return `
   <div class="mtabs">${meses.map(k=>`<button class="mtab${k===mesSel?" on":""}" data-act="mes" data-k="${k}">${abrevMes(k)}</button>`).join("")}</div>
   <div class="card hero">
@@ -269,9 +272,9 @@ function vResumo(){
     <div class="split"><span>Fixo <b>${R(rfT)}</b></span><span>Produção <b>${R(rpT)}</b></span></div>
   </div>
   <h2>${verbo} no mês</h2>
-  ${recCard("Fixo",rf,rfT)}${recCard("Produção",rp,rpT)}
+  ${recCard("Fixo",rf,rfT,true)}${recCard("Produção",rp,rpT)}
   <h2>Produzido no mês</h2>
-  ${prodCard("Fixo",pf)}${prodCard("Produção",pp)}`;
+  ${prodCard("Fixo",pf,true)}${prodCard("Produção",pp)}`;
 }
 // mês em que cada lançamento "conta": eletivos pelo fim do período (21 a 20), o resto pelo mês da data
 const mesProducao = e => (e.tipo==="eletivo"||e.tipo==="fechamento") ? periodoEletivo(e.data).fim.slice(0,7) : e.data.slice(0,7);
@@ -288,11 +291,12 @@ function producaoMes(k){
     let it=g[key];
     if(!it){
       const pe=ele?periodoEletivo(e.data):null;
-      it=g[key]={key,nome:ele?"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim):TIPOS[e.tipo].nome,valor:0,qtd:0,pags:new Set()};
+      it=g[key]={key,nome:ele?"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim):TIPOS[e.tipo].nome,valor:0,qtd:0,pags:new Set(),dias:new Set()};
     }
     it.valor+=valorEntrada(e);
     it.qtd+=e.tipo==="fechamento"?0:(e.qtd||1);
     parcelas(e).forEach(q=>it.pags.add(q.data));
+    it.dias.add(e.data);
   }
   return ["eletivo","turno","urgencia","sob_noturno","sob_fds","sob_feriado"].filter(k=>g[k]).map(k=>g[k]);
 }
