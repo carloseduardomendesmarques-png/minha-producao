@@ -50,7 +50,8 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 .items li b{color:var(--ink);font-weight:550;white-space:nowrap}
 .late{border-color:var(--warn);background:var(--warn-soft)}
 .tag{display:inline-block;font-size:12px;font-weight:550;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:8px;vertical-align:middle}
-.mtabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
+.hero .split{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:14px;opacity:.95}
+.mtabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
 .mtabs::-webkit-scrollbar{display:none}
 .mtab{flex:none;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:8px 14px;cursor:pointer;font-weight:550;color:var(--muted)}
 .mtab.on{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
@@ -154,6 +155,8 @@ const TIPOS = {
   fechamento:  {nome:"Total de período",          dica:"Eletivos já fechados"}
 };
 const FIXO_CFG = {sob_noturno:"sobNoturno", sob_fds:"sobFds", sob_feriado:"sobFeriado"};
+// valor fixo (turnos e sobreavisos) x produção (pago por exame)
+const CAT = {turno:"fixo", sob_noturno:"fixo", sob_fds:"fixo", sob_feriado:"fixo", eletivo:"producao", fechamento:"producao", urgencia:"producao"};
 
 // ---------- utilitários de data e valor ----------
 const pad = n => String(n).padStart(2,"0");
@@ -239,33 +242,36 @@ let tab = "resumo", mesSel = null;
 const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", cont:{}, qtd:1, valor:""};
 
 function vResumo(){
-  const hoje=hojeStr(), pg=pagamentos();
   if(!S.entries.length) return `<div class="card empty"><p><b>Nada lançado ainda.</b></p><p>Lance seus exames, turnos e sobreavisos e o app calcula quanto e quando você vai receber.</p><button class="btn pri" data-act="go" data-tab="lancar">Fazer o primeiro lançamento</button></div>`;
-  // o que já passou da data conta como pago; o resto é "a receber"
-  const fut=pg.filter(g=>g.data>=hoje);
-  const totalFut=fut.reduce((s,g)=>s+g.total,0);
-  const meses=mesesDisponiveis();
-  if(!mesSel||!meses.includes(mesSel)) mesSel=hoje.slice(0,7);
-  const rec=pg.filter(g=>g.data.slice(0,7)===mesSel), recT=rec.reduce((s,g)=>s+g.total,0);
-  const prod=producaoMes(mesSel), prodT=prod.reduce((s,i)=>s+i.valor,0);
+  const mesAtual=hojeStr().slice(0,7), meses=mesesDisponiveis();
+  if(!mesSel||!meses.includes(mesSel)) mesSel=mesAtual;
+  const verbo = mesSel<mesAtual ? "Recebido" : "A receber";
+  // pagamentos que caem no mês selecionado, separados em fixo e produção
+  const rec={fixo:{},producao:{}};
+  for(const e of S.entries) for(const q of parcelas(e)){
+    if(q.data.slice(0,7)!==mesSel) continue;
+    const b=rec[CAT[e.tipo]], k=q.data+"|"+q.grupo;
+    const it=b[k]||(b[k]={data:q.data,grupo:q.grupo,valor:0,qtd:0});
+    it.valor+=q.valor; it.qtd+=q.qtd;
+  }
+  const soma=a=>a.reduce((s,i)=>s+i.valor,0);
+  const ordenar=o=>Object.values(o).sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
+  const rf=ordenar(rec.fixo), rp=ordenar(rec.producao), rfT=soma(rf), rpT=soma(rp);
+  const prod=producaoMes(mesSel), pf=prod.filter(i=>CAT[i.key]==="fixo"), pp=prod.filter(i=>CAT[i.key]==="producao");
+  const vazio=`<div class="small" style="margin-top:6px">Nada neste mês.</div>`;
+  const recCard=(titulo,a,t)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(t)}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}<br><span class="small">${fData(i.data)} · ${fDow(i.data)}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  const prodCard=(titulo,a)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(soma(a))}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
   return `
-  <div class="card hero">
-    <div class="lbl">Total a receber</div>
-    <div class="big">${R(totalFut)}</div>
-    <div class="next">${fut.length?`Próximo: <b>${R(fut[0].total)}</b> em ${fData(fut[0].data)}`:"Nenhum pagamento futuro"}</div>
-  </div>
   <div class="mtabs">${meses.map(k=>`<button class="mtab${k===mesSel?" on":""}" data-act="mes" data-k="${k}">${abrevMes(k)}</button>`).join("")}</div>
-  <h2>${nomeMes(mesSel)}</h2>
-  <div class="grid2">
-    <div class="card"><div class="lbl">Produzido no mês</div><div class="val">${R(prodT)}</div></div>
-    <div class="card"><div class="lbl">${mesSel<hoje.slice(0,7)?"Recebido no mês":"A receber no mês"}</div><div class="val">${R(recT)}</div></div>
+  <div class="card hero">
+    <div class="lbl">${verbo} em ${nomeMes(mesSel)}</div>
+    <div class="big">${R(rfT+rpT)}</div>
+    <div class="split"><span>Fixo <b>${R(rfT)}</b></span><span>Produção <b>${R(rpT)}</b></span></div>
   </div>
-  <h3 class="sec">Produção</h3>
-  <div class="card">${prod.length?prod.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):`<div class="small">Nada produzido neste mês.</div>`}</div>
-  <h3 class="sec">Recebimentos</h3>
-  ${rec.length?rec.map(g=>`<div class="card">
-    <div class="pay-h"><span class="d">${fData(g.data)} · ${fDow(g.data)}</span><span class="t">${R(g.total)}</span></div>
-    <ul class="items">${Object.values(g.itens).map(i=>`<li><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}</span><b>${R(i.valor)}</b></li>`).join("")}</ul></div>`).join(""):`<div class="card small">Nenhum pagamento neste mês.</div>`}`;
+  <h2>${verbo} no mês</h2>
+  ${recCard("Fixo",rf,rfT)}${recCard("Produção",rp,rpT)}
+  <h2>Produzido no mês</h2>
+  ${prodCard("Fixo",pf)}${prodCard("Produção",pp)}`;
 }
 // mês em que cada lançamento "conta": eletivos pelo fim do período (21 a 20), o resto pelo mês da data
 const mesProducao = e => (e.tipo==="eletivo"||e.tipo==="fechamento") ? periodoEletivo(e.data).fim.slice(0,7) : e.data.slice(0,7);
