@@ -143,12 +143,20 @@ const DEF_PRECOS = [
   ["USG","US - Parede abdominal",36.92],
   ["USG","US - Região inguinal",36.92],
   ["USG","US - Testículos",36.92],
-  ["USG","US - Pélvica",36.92]
+  ["USG","US - Pélvica",36.92],
+  // TC eletiva = 90% do valor de urgência
+  ["TC","TC - Geral (demais TCs)",36],
+  ["TC","TC - Abdome total",54],
+  ["TC","AngioTC",54],
+  // TC de urgência / internado ("TCU")
+  ["TCU","TC - Geral (demais TCs)",40],
+  ["TCU","TC - Abdome total",60],
+  ["TCU","AngioTC",60]
 ].map(([mod,nome,valor],i)=>({id:"p"+i,mod,nome,valor}));
 
 const TIPOS = {
   eletivo:     {nome:"Eletivos",                  dica:"USG / TC da agenda"},
-  urgencia:    {nome:"Urgência / internado",      dica:"USG · por exame"},
+  urgencia:    {nome:"Urgência / internado",      dica:"USG / TC · por exame"},
   turno:       {nome:"Turno 6h",                  dica:"Meio de semana"},
   sob_noturno: {nome:"Sobreaviso noturno",        dica:"USG"},
   sob_fds:     {nome:"Sobreaviso fim de semana",  dica:"USG"},
@@ -157,7 +165,8 @@ const TIPOS = {
 };
 const FIXO_CFG = {sob_noturno:"sobNoturno", sob_fds:"sobFds", sob_feriado:"sobFeriado"};
 // valor fixo (turnos e sobreavisos) x produção (pago por exame)
-const CAT = {turno:"fixo", sob_noturno:"fixo", sob_fds:"fixo", sob_feriado:"fixo", eletivo:"producao", fechamento:"producao", urgencia:"producao"};
+const CAT = {turno:"fixo", sob_noturno:"fixo", sob_fds:"fixo", sob_feriado:"fixo", eletivo:"producao", eletivo_tc:"producao", fechamento:"producao", urgencia:"producao", urgencia_tc:"producao"};
+const modOf = e => e.mod==="TC" ? "TC" : "USG";
 
 // ---------- utilitários de data e valor ----------
 const pad = n => String(n).padStart(2,"0");
@@ -186,6 +195,9 @@ function load(){
   try{d=JSON.parse(localStorage.getItem(KEY));}catch(e){}
   S = Object.assign({entries:[],recebidos:{},config:{},precos:DEF_PRECOS.map(p=>({...p}))}, d||{});
   S.config = Object.assign({...DEF_CFG}, S.config);
+  // quem já usava o app recebe as TCs padrão, se ainda não tiver cadastrado nenhuma
+  for(const m of ["TC","TCU"])
+    if(!S.precos.some(p=>p.mod===m)) S.precos.push(...DEF_PRECOS.filter(p=>p.mod===m).map(p=>({...p})));
 }
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(S));}
@@ -205,7 +217,8 @@ function parcelas(e){
     case "fechamento":{
       const pe=periodoEletivo(e.data);
       const valor = e.tipo==="eletivo" ? e.qtd*e.valorUnit : e.valor;
-      return [{data:pe.pag, valor, grupo:"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim), qtd:e.tipo==="eletivo"?e.qtd:0}];
+      const mod = e.tipo==="eletivo" ? modOf(e)+" " : "";
+      return [{data:pe.pag, valor, grupo:"Eletivos "+mod+fCurta(pe.ini)+" a "+fCurta(pe.fim), qtd:e.tipo==="eletivo"?e.qtd:0}];
     }
     case "turno":
       return [
@@ -213,7 +226,7 @@ function parcelas(e){
         {data:fix, valor:e.p2, grupo:"Turnos de "+mes+" (2ª parcela)", qtd:1}
       ];
     case "urgencia":
-      return [{data:fix, valor:e.qtd*e.valorUnit, grupo:"Urgências/internados de "+mes, qtd:e.qtd}];
+      return [{data:fix, valor:e.qtd*e.valorUnit, grupo:"Urgências/internados "+modOf(e)+" de "+mes, qtd:e.qtd}];
     default:
       return [{data:fix, valor:e.valor, grupo:TIPOS[e.tipo].nome+" de "+mes, qtd:1}];
   }
@@ -232,7 +245,7 @@ function pagamentos(){
 function rotulo(e){
   switch(e.tipo){
     case "eletivo": return e.exame+(e.qtd>1?" ×"+e.qtd:"");
-    case "urgencia": return "Urgência/internado ×"+e.qtd;
+    case "urgencia": return e.exame ? "Urgência · "+e.exame+(e.qtd>1?" ×"+e.qtd:"") : "Urgência/internado USG ×"+e.qtd;
     case "fechamento": {const pe=periodoEletivo(e.data);return "Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim)+" (total)";}
     default: return TIPOS[e.tipo].nome;
   }
@@ -240,7 +253,7 @@ function rotulo(e){
 
 // ---------- telas ----------
 let tab = "resumo", mesSel = null;
-const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", cont:{}, qtd:1, valor:""};
+const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", umod:"USG", cont:{}, qtd:1, valor:""};
 
 function vResumo(){
   if(!S.entries.length) return `<div class="card empty"><p><b>Nada lançado ainda.</b></p><p>Lance seus exames, turnos e sobreavisos e o app calcula quanto e quando você vai receber.</p><button class="btn pri" data-act="go" data-tab="lancar">Fazer o primeiro lançamento</button></div>`;
@@ -287,27 +300,32 @@ function producaoMes(k){
   const g={};
   for(const e of S.entries){
     if(mesProducao(e)!==k) continue;
-    const ele=e.tipo==="eletivo"||e.tipo==="fechamento", key=ele?"eletivo":e.tipo;
+    const ele=e.tipo==="eletivo"||e.tipo==="fechamento", tc=modOf(e)==="TC";
+    const key = (e.tipo==="eletivo"||e.tipo==="urgencia") && tc ? e.tipo+"_tc" : e.tipo;
     let it=g[key];
     if(!it){
-      const pe=ele?periodoEletivo(e.data):null;
-      it=g[key]={key,nome:ele?"Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim):TIPOS[e.tipo].nome,valor:0,qtd:0,pags:new Set(),dias:new Set()};
+      const pe=ele?periodoEletivo(e.data):null, faixa=ele?fCurta(pe.ini)+" a "+fCurta(pe.fim):"";
+      const nome = e.tipo==="eletivo" ? "Eletivos "+modOf(e)+" "+faixa
+        : e.tipo==="fechamento" ? "Eletivos "+faixa+" (total)"
+        : e.tipo==="urgencia" ? "Urgência / internado "+modOf(e)
+        : TIPOS[e.tipo].nome;
+      it=g[key]={key,nome,valor:0,qtd:0,pags:new Set(),dias:new Set()};
     }
     it.valor+=valorEntrada(e);
     it.qtd+=e.tipo==="fechamento"?0:(e.qtd||1);
     parcelas(e).forEach(q=>it.pags.add(q.data));
     it.dias.add(e.data);
   }
-  return ["eletivo","turno","urgencia","sob_noturno","sob_fds","sob_feriado"].filter(k=>g[k]).map(k=>g[k]);
+  return ["eletivo","eletivo_tc","fechamento","urgencia","urgencia_tc","turno","sob_noturno","sob_fds","sob_feriado"].filter(k=>g[k]).map(k=>g[k]);
 }
-const unid = i => i.key==="eletivo"||i.key==="urgencia" ? (i.qtd===1?"exame":"exames") : i.key==="turno" ? (i.qtd===1?"turno":"turnos") : (i.qtd===1?"plantão":"plantões");
+const unid = i => /^(eletivo|urgencia)/.test(i.key) ? (i.qtd===1?"exame":"exames") : i.key==="turno" ? (i.qtd===1?"turno":"turnos") : (i.qtd===1?"plantão":"plantões");
 const nomeMes = k => {const p=parse(k+"-01");return MESES[p.m]+" de "+p.y;};
 const abrevMes = k => {const p=parse(k+"-01");return MESES[p.m].slice(0,3)+"/"+String(p.y).slice(2);};
 
 function rascunho(){
   const c=S.config, base={tipo:L.tipo,data:L.data};
   if(L.tipo==="turno") return {...base,p1:c.turnoP1,p2:c.turnoP2};
-  if(L.tipo==="urgencia") return {...base,qtd:L.qtd,valorUnit:c.urgencia};
+  if(L.tipo==="urgencia") return {...base,mod:"USG",qtd:L.qtd,valorUnit:c.urgencia};
   if(FIXO_CFG[L.tipo]) return {...base,valor:c[FIXO_CFG[L.tipo]]};
   if(L.tipo==="fechamento") return {...base,valor:toNum(L.valor)};
   return null;
@@ -319,20 +337,27 @@ function vLancar(){
   const c=S.config;
   const chips=Object.entries(TIPOS).map(([k,t])=>`<button class="chip${L.tipo===k?" on":""}" data-act="tipo" data-t="${k}">${t.nome}<small>${t.dica}</small></button>`).join("");
   let corpo="";
-  if(L.tipo==="eletivo"){
-    const lista=S.precos.filter(p=>p.mod===L.mod);
+  // lista de exames com contadores + barra de total (eletivos e TC de urgência)
+  const listaExames=(mod,rotuloMod)=>{
+    const lista=S.precos.filter(p=>p.mod===mod);
     let q=0,v=0;
     for(const p of lista){const n=L.cont[p.id]||0;q+=n;v+=n*p.valor;}
-    const pe=periodoEletivo(L.data);
-    corpo=`<div class="seg">${["USG","TC"].map(m=>`<button class="${L.mod===m?"on":""}" data-act="mod" data-m="${m}">${m}</button>`).join("")}</div>
-    <div class="info">Período ${fData(pe.ini)} a ${fData(pe.fim)} · pago em <b>${fData(pe.pag)}</b></div>
-    <div class="card">${lista.length?lista.map(p=>{const n=L.cont[p.id]||0;return `<div class="ex${n?" has":""}"><div class="n">${esc(p.nome)}<small>${R(p.valor)}</small></div><div class="step"><button data-act="menos" data-id="${p.id}" aria-label="Menos">−</button><span class="q">${n}</span><button data-act="mais" data-id="${p.id}" aria-label="Mais">+</button></div></div>`;}).join(""):`<div class="small">Nenhum exame de ${L.mod} cadastrado. Inclua os exames e valores em <button class="link" data-act="go" data-tab="ajustes">Ajustes</button>.</div>`}</div>
+    return `<div class="card">${lista.length?lista.map(p=>{const n=L.cont[p.id]||0;return `<div class="ex${n?" has":""}"><div class="n">${esc(p.nome)}<small>${R(p.valor)}</small></div><div class="step"><button data-act="menos" data-id="${p.id}" aria-label="Menos">−</button><span class="q">${n}</span><button data-act="mais" data-id="${p.id}" aria-label="Mais">+</button></div></div>`;}).join(""):`<div class="small">Nenhum exame de ${rotuloMod} cadastrado. Inclua os exames e valores em <button class="link" data-act="go" data-tab="ajustes">Ajustes</button>.</div>`}</div>
     <div class="bar"><div><div class="t">${R(v)}</div><div class="small">${q} exame${q===1?"":"s"}</div></div><button class="btn pri" data-act="salvar" ${q?"":"disabled"}>Salvar</button></div>`;
+  };
+  const seg=(atual,act)=>`<div class="seg">${["USG","TC"].map(m=>`<button class="${atual===m?"on":""}" data-act="${act}" data-m="${m}">${m}</button>`).join("")}</div>`;
+  if(L.tipo==="eletivo"){
+    const pe=periodoEletivo(L.data);
+    corpo=`${seg(L.mod,"mod")}
+    <div class="info">Período ${fData(pe.ini)} a ${fData(pe.fim)} · pago em <b>${fData(pe.pag)}</b></div>
+    ${listaExames(L.mod,L.mod)}`;
   } else if(L.tipo==="urgencia"){
-    const e=rascunho();
-    corpo=`<div class="card"><div class="ex"><div class="n">Exames de urgência / internados<small>${R(c.urgencia)} cada</small></div><div class="step"><button data-act="qmenos">−</button><span class="q">${L.qtd}</span><button data-act="qmais">+</button></div></div></div>
+    const e=rascunho(), p=parse(L.data), pag=ymd(p.y,p.m+2,c.diaFixos);
+    corpo = seg(L.umod,"umod") + (L.umod==="TC"
+      ? `<div class="info">TC de urgência / internado · pago em <b>${fData(pag)}</b></div>${listaExames("TCU","TC de urgência")}`
+      : `<div class="card"><div class="ex"><div class="n">USG de urgência / internados<small>${R(c.urgencia)} cada</small></div><div class="step"><button data-act="qmenos">−</button><span class="q">${L.qtd}</span><button data-act="qmais">+</button></div></div></div>
     <div class="info">${previsao(e)}</div>
-    <button class="btn pri full" data-act="salvar">Salvar ${R(e.qtd*e.valorUnit)}</button>`;
+    <button class="btn pri full" data-act="salvar">Salvar ${R(e.qtd*e.valorUnit)}</button>`);
   } else if(L.tipo==="fechamento"){
     const pe=periodoEletivo(L.data);
     corpo=`<div class="info">Use para lançar o total de um período de eletivos já fechado (por exemplo, o valor de um relatório do hospital). A data escolhida acima define o período: <b>${fData(pe.ini)} a ${fData(pe.fim)}</b>, pago em <b>${fData(pe.pag)}</b>.</div>
@@ -386,14 +411,14 @@ function vProducao(){
 function vAjustes(){
   const c=S.config;
   const linha=(k,txt)=>`<label for="c_${k}">${txt}</label><input id="c_${k}" data-cfg="${k}" inputmode="decimal" value="${String(c[k]).replace(".",",")}">`;
-  const tabela=m=>`<h2>Exames ${m}</h2><div class="card">
+  const tabela=(m,titulo)=>`<h2>${titulo}</h2><div class="card">
     ${S.precos.filter(p=>p.mod===m).map(p=>`<div class="prow"><input data-pn="${p.id}" value="${esc(p.nome)}" aria-label="Nome do exame"><input data-pv="${p.id}" inputmode="decimal" value="${p.valor.toFixed(2).replace(".",",")}" aria-label="Valor"><button class="x" data-act="delpreco" data-id="${p.id}" aria-label="Remover">×</button></div>`).join("")||`<div class="small" style="margin-bottom:8px">Nenhum exame cadastrado.</div>`}
-    <button class="link" data-act="addpreco" data-m="${m}">+ Adicionar exame ${m}</button></div>`;
+    <button class="link" data-act="addpreco" data-m="${m}">+ Adicionar exame</button></div>`;
   return `<h2>Valores fixos (R$)</h2>
   <div class="card cfg">
     ${linha("turnoP1","Turno 6h: 1ª parcela")}
     ${linha("turnoP2","Turno 6h: 2ª parcela")}
-    ${linha("urgencia","Urgência / internado (por exame)")}
+    ${linha("urgencia","USG urgência / internado (por exame)")}
     ${linha("sobNoturno","Sobreaviso noturno")}
     ${linha("sobFds","Sobreaviso fim de semana")}
     ${linha("sobFeriado","Sobreaviso feriado 12h")}
@@ -404,7 +429,7 @@ function vAjustes(){
     ${linha("diaFixos","Segundo mês: sobreavisos, urgências e 2ª parcela")}
   </div>
   <p class="small" style="margin:0 4px">Mudanças nos valores só valem para lançamentos novos. Os já lançados mantêm o valor da época.</p>
-  ${tabela("USG")}${tabela("TC")}
+  ${tabela("USG","USG eletivo")}${tabela("TC","TC eletiva")}${tabela("TCU","TC urgência / internado")}
   <h2>Backup</h2>
   <div class="card">
     <p class="small" style="margin-top:0">Os dados ficam salvos só neste aparelho e navegador. Faça backup de vez em quando ou para passar para outro aparelho.</p>
@@ -436,6 +461,7 @@ $("#app").addEventListener("click",ev=>{
   if(a==="go") return go(b.dataset.tab);
   if(a==="tipo"){L.tipo=b.dataset.t;L.qtd=1;return render();}
   if(a==="mod"){L.mod=b.dataset.m;return render();}
+  if(a==="umod"){L.umod=b.dataset.m;return render();}
   if(a==="mais"){L.cont[id]=(L.cont[id]||0)+1;return render();}
   if(a==="menos"){L.cont[id]=Math.max(0,(L.cont[id]||0)-1);return render();}
   if(a==="qmais"){L.qtd++;return render();}
@@ -468,11 +494,12 @@ $("#app").addEventListener("change",ev=>{
 $("#app").addEventListener("input",ev=>{if(ev.target.id==="fval")L.valor=ev.target.value;});
 
 function salvar(){
-  if(L.tipo==="eletivo"){
+  const tcUrg = L.tipo==="urgencia" && L.umod==="TC";
+  if(L.tipo==="eletivo"||tcUrg){
     let n=0;
-    for(const p of S.precos.filter(p=>p.mod===L.mod)){
+    for(const p of S.precos.filter(p=>p.mod===(tcUrg?"TCU":L.mod))){
       const q=L.cont[p.id]||0; if(!q) continue;
-      S.entries.push({id:uid(),tipo:"eletivo",data:L.data,mod:p.mod,exame:p.nome,qtd:q,valorUnit:p.valor});
+      S.entries.push({id:uid(),tipo:L.tipo,data:L.data,mod:tcUrg?"TC":p.mod,exame:p.nome,qtd:q,valorUnit:p.valor});
       n+=q;
     }
     if(!n) return;
