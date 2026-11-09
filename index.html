@@ -50,6 +50,9 @@ h2{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 .items li b{color:var(--ink);font-weight:550;white-space:nowrap}
 .late{border-color:var(--warn);background:var(--warn-soft)}
 .tag{display:inline-block;font-size:12px;font-weight:550;padding:2px 8px;border-radius:99px;background:var(--warn);color:#fff;margin-left:8px;vertical-align:middle}
+.tag.esc{background:var(--brand-soft);color:var(--brand);font-size:11px;padding:1px 7px}
+.esc-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:6px;margin-top:10px}
+.esc-add select{min-height:40px;padding:6px 8px;font-size:14px}
 .dias{color:var(--ink);font-weight:550}
 .hero .split{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:14px;opacity:.95}
 .mtabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
@@ -167,6 +170,9 @@ const FIXO_CFG = {sob_noturno:"sobNoturno", sob_fds:"sobFds", sob_feriado:"sobFe
 // valor fixo (turnos e sobreavisos) x produção (pago por exame)
 const CAT = {turno:"fixo", sob_noturno:"fixo", sob_fds:"fixo", sob_feriado:"fixo", eletivo:"producao", eletivo_tc:"producao", fechamento:"producao", urgencia:"producao", urgencia_tc:"producao"};
 const modOf = e => e.mod==="TC" ? "TC" : "USG";
+// escala fixa: plantões que se repetem toda semana (dow: 0 = domingo ... 6 = sábado)
+const DEF_ESCALA = [{id:"e1",dow:1,tipo:"turno"},{id:"e2",dow:1,tipo:"sob_noturno"},{id:"e3",dow:0,tipo:"sob_fds"}];
+const DIAS_L = ["domingo","segunda","terça","quarta","quinta","sexta","sábado"];
 
 // ---------- utilitários de data e valor ----------
 const pad = n => String(n).padStart(2,"0");
@@ -198,6 +204,30 @@ function load(){
   // quem já usava o app recebe as TCs padrão, se ainda não tiver cadastrado nenhuma
   for(const m of ["TC","TCU"])
     if(!S.precos.some(p=>p.mod===m)) S.precos.push(...DEF_PRECOS.filter(p=>p.mod===m).map(p=>({...p})));
+  if(!S.escala){S.escala=DEF_ESCALA.map(x=>({...x}));S.escalaInicio=hojeStr();S.escalaExcl=[];}
+  if(gerarEscala()) save();
+}
+
+// lança os plantões da escala até o fim do mês que vem, sem repetir
+// o que já existe naquele dia nem o que você apagou
+function gerarEscala(){
+  const excl=new Set(S.escalaExcl||[]), t=new Date(), ate=ymd(t.getFullYear(),t.getMonth()+1,31);
+  const ja=new Set(S.entries.map(e=>e.tipo+"|"+e.data));
+  let n=0;
+  for(const p=parse(S.escalaInicio||hojeStr()), d=new Date(p.y,p.m,p.d); ; d.setDate(d.getDate()+1)){
+    const s=ymd(d.getFullYear(),d.getMonth(),d.getDate());
+    if(s>ate) break;
+    for(const it of S.escala){
+      if(it.dow!==d.getDay()||excl.has(it.id+"|"+s)||ja.has(it.tipo+"|"+s)) continue;
+      S.entries.push({...fixoEntrada(it.tipo,s),id:uid(),escala:it.id});
+      ja.add(it.tipo+"|"+s); n++;
+    }
+  }
+  return n;
+}
+function fixoEntrada(tipo,data){
+  const c=S.config;
+  return tipo==="turno" ? {tipo,data,p1:c.turnoP1,p2:c.turnoP2} : {tipo,data,valor:c[FIXO_CFG[tipo]]};
 }
 function save(){
   try{localStorage.setItem(KEY,JSON.stringify(S));}
@@ -324,9 +354,8 @@ const abrevMes = k => {const p=parse(k+"-01");return MESES[p.m].slice(0,3)+"/"+S
 
 function rascunho(){
   const c=S.config, base={tipo:L.tipo,data:L.data};
-  if(L.tipo==="turno") return {...base,p1:c.turnoP1,p2:c.turnoP2};
+  if(L.tipo==="turno"||FIXO_CFG[L.tipo]) return fixoEntrada(L.tipo,L.data);
   if(L.tipo==="urgencia") return {...base,mod:"USG",qtd:L.qtd,valorUnit:c.urgencia};
-  if(FIXO_CFG[L.tipo]) return {...base,valor:c[FIXO_CFG[L.tipo]]};
   if(L.tipo==="fechamento") return {...base,valor:toNum(L.valor)};
   return null;
 }
@@ -376,7 +405,7 @@ function vLancar(){
   ${doDia.length?`<h2>Lançado em ${fData(L.data)}</h2><div class="card">${doDia.map(entLinha).join("")}</div>`:""}`;
 }
 function entLinha(e){
-  return `<div class="ent"><span>${esc(rotulo(e))}</span><span><span class="v">${R(valorEntrada(e))}</span><button class="x" data-act="apagar" data-id="${e.id}" aria-label="Apagar">×</button></span></div>`;
+  return `<div class="ent"><span>${esc(rotulo(e))}${e.escala?'<span class="tag esc">escala</span>':""}</span><span><span class="v">${R(valorEntrada(e))}</span><button class="x" data-act="apagar" data-id="${e.id}" aria-label="Apagar">×</button></span></div>`;
 }
 
 function vProducao(){
@@ -414,7 +443,15 @@ function vAjustes(){
   const tabela=(m,titulo)=>`<h2>${titulo}</h2><div class="card">
     ${S.precos.filter(p=>p.mod===m).map(p=>`<div class="prow"><input data-pn="${p.id}" value="${esc(p.nome)}" aria-label="Nome do exame"><input data-pv="${p.id}" inputmode="decimal" value="${p.valor.toFixed(2).replace(".",",")}" aria-label="Valor"><button class="x" data-act="delpreco" data-id="${p.id}" aria-label="Remover">×</button></div>`).join("")||`<div class="small" style="margin-bottom:8px">Nenhum exame cadastrado.</div>`}
     <button class="link" data-act="addpreco" data-m="${m}">+ Adicionar exame</button></div>`;
-  return `<h2>Valores fixos (R$)</h2>
+  const segPrimeiro = d => (d+6)%7; // ordena de segunda a domingo
+  const escala = `<h2>Escala fixa</h2><div class="card">
+    <p class="small" style="margin-top:0">Estes plantões são lançados sozinhos toda semana, até o fim do mês que vem. Se não fizer algum, apague no dia (abas Lançar ou Produção). Plantões extras você lança normalmente.</p>
+    ${[...S.escala].sort((a,b)=>segPrimeiro(a.dow)-segPrimeiro(b.dow)).map(it=>`<div class="ent"><span><b>${DIAS_L[it.dow]}</b> · ${TIPOS[it.tipo].nome}</span><button class="x" data-act="delescala" data-id="${it.id}" aria-label="Tirar da escala">×</button></div>`).join("")||`<div class="small">Nenhum plantão na escala.</div>`}
+    <div class="esc-add"><select id="esc_dow" aria-label="Dia da semana">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}">${DIAS_L[d]}</option>`).join("")}</select><select id="esc_tipo" aria-label="Tipo de plantão">${["turno","sob_noturno","sob_fds","sob_feriado"].map(t=>`<option value="${t}">${TIPOS[t].nome}</option>`).join("")}</select><button class="btn" data-act="addescala">Incluir</button></div>
+    <div class="field" style="margin:12px 0 0"><label for="esc_ini">Lançar a escala a partir de</label><input type="date" id="esc_ini" value="${S.escalaInicio}"></div>
+  </div>`;
+  return `${escala}
+  <h2>Valores fixos (R$)</h2>
   <div class="card cfg">
     ${linha("turnoP1","Turno 6h: 1ª parcela")}
     ${linha("turnoP2","Turno 6h: 2ª parcela")}
@@ -469,12 +506,32 @@ $("#app").addEventListener("click",ev=>{
   if(a==="salvar") return salvar();
   if(a==="apagar"){
     const e=S.entries.find(x=>x.id===id);
-    if(e&&confirm("Apagar \""+rotulo(e)+"\" de "+fData(e.data)+"?")){S.entries=S.entries.filter(x=>x.id!==id);save();render();toast("Lançamento apagado");}
+    if(e&&confirm("Apagar \""+rotulo(e)+"\" de "+fData(e.data)+"?")){
+      // plantão da escala apagado não é lançado de novo
+      if(e.escala)(S.escalaExcl||(S.escalaExcl=[])).push(e.escala+"|"+e.data);
+      S.entries=S.entries.filter(x=>x.id!==id);save();render();toast("Lançamento apagado");
+    }
     return;
   }
   if(a==="mes"){mesSel=b.dataset.k;return render();}
   if(a==="addpreco"){S.precos.push({id:uid(),mod:b.dataset.m,nome:"Novo exame "+b.dataset.m,valor:0});save();render();return;}
   if(a==="delpreco"){const p=S.precos.find(x=>x.id===id);if(p&&confirm("Remover \""+p.nome+"\" da tabela?")){S.precos=S.precos.filter(x=>x.id!==id);save();render();}return;}
+  if(a==="addescala"){
+    const dow=+$("#esc_dow").value, tipo=$("#esc_tipo").value;
+    if(S.escala.some(x=>x.dow===dow&&x.tipo===tipo)){toast("Esse plantão já está na escala");return;}
+    S.escala.push({id:uid(),dow,tipo});
+    const n=gerarEscala();save();render();toast(n+" plantão"+(n===1?"":"es")+" lançado"+(n===1?"":"s"));
+    return;
+  }
+  if(a==="delescala"){
+    const it=S.escala.find(x=>x.id===id); if(!it) return;
+    if(!confirm("Tirar "+TIPOS[it.tipo].nome+" de "+DIAS_L[it.dow]+" da escala? Os lançamentos dele a partir de amanhã também serão apagados.")) return;
+    const hoje=hojeStr();
+    S.escala=S.escala.filter(x=>x.id!==id);
+    S.entries=S.entries.filter(e=>!(e.escala===id&&e.data>hoje));
+    save();render();toast("Removido da escala");
+    return;
+  }
   if(a==="exportar") return exportar();
   if(a==="importar") return $("#arq").click();
 });
@@ -489,6 +546,11 @@ $("#app").addEventListener("change",ev=>{
   }
   if(el.dataset.pn){const p=S.precos.find(x=>x.id===el.dataset.pn);if(p){p.nome=el.value.trim()||p.nome;save();toast("Salvo");}return;}
   if(el.dataset.pv){const p=S.precos.find(x=>x.id===el.dataset.pv);if(p){p.valor=toNumSimples(el.value);save();toast("Salvo");}return;}
+  if(el.id==="esc_ini"&&el.value){
+    S.escalaInicio=el.value;
+    const n=gerarEscala();save();render();toast(n?n+" plantão"+(n===1?"":"es")+" lançado"+(n===1?"":"s"):"Salvo");
+    return;
+  }
   if(el.id==="arq"&&el.files[0]) return importar(el.files[0]);
 });
 $("#app").addEventListener("input",ev=>{if(ev.target.id==="fval")L.valor=ev.target.value;});
