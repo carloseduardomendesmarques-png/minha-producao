@@ -147,10 +147,10 @@ const DEF_PRECOS = [
   ["USG","US - Região inguinal",36.92],
   ["USG","US - Testículos",36.92],
   ["USG","US - Pélvica",36.92],
-  // TC eletiva = 90% do valor de urgência
-  ["TC","TC - Geral (demais TCs)",36],
-  ["TC","TC - Abdome total",54],
-  ["TC","AngioTC",54],
+  // TC eletiva: mesmo valor da TC de urgência / internado
+  ["TC","TC - Geral (demais TCs)",40],
+  ["TC","TC - Abdome total",60],
+  ["TC","AngioTC",60],
   // TC de urgência / internado ("TCU")
   ["TCU","TC - Geral (demais TCs)",40],
   ["TCU","TC - Abdome total",60],
@@ -204,6 +204,14 @@ function load(){
   // quem já usava o app recebe as TCs padrão, se ainda não tiver cadastrado nenhuma
   for(const m of ["TC","TCU"])
     if(!S.precos.some(p=>p.mod===m)) S.precos.push(...DEF_PRECOS.filter(p=>p.mod===m).map(p=>({...p})));
+  // correção (uma vez só): TC eletiva passou de 90% para 100% do valor de urgência,
+  // na tabela e nos exames já lançados
+  if(!S.tcEletiva100){
+    const novo={36:40,54:60};
+    for(const p of S.precos) if(p.mod==="TC"&&novo[p.valor]) p.valor=novo[p.valor];
+    for(const e of S.entries) if(e.tipo==="eletivo"&&e.mod==="TC"&&novo[e.valorUnit]) e.valorUnit=novo[e.valorUnit];
+    S.tcEletiva100=true; save();
+  }
   if(!S.escala){S.escala=DEF_ESCALA.map(x=>({...x}));S.escalaInicio=hojeStr();S.escalaExcl=[];}
   if(gerarEscala()) save();
 }
