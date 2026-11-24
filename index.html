@@ -107,10 +107,16 @@ input[type=date],input[type=text],input[type=number],input[inputmode],select{wid
 .tabs button.on{color:var(--brand);font-weight:650}
 #toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:9;max-width:calc(100% - 32px)}
 #toast.show{opacity:1;transform:translateX(-50%)}
+#sync{max-width:640px;margin:0 auto;padding:0 16px}
+#sync:empty{display:none}
+.syncbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);border:1px solid var(--warn);font-size:14px}
+.syncbar.erro{border-color:var(--danger)}
+.syncbar .btn{padding:8px 12px;white-space:nowrap}
 </style>
 </head>
 <body>
 <header class="top"><h1 id="titulo">Resumo</h1><span class="sub" id="hoje"></span></header>
+<div id="sync"></div>
 <main id="app"></main>
 <div id="toast"></div>
 <nav class="tabs" id="tabs">
@@ -208,10 +214,12 @@ function load(){
     const novo={36:40,54:60};
     for(const p of S.precos) if(p.mod==="TC"&&novo[p.valor]) p.valor=novo[p.valor];
     for(const e of S.entries) if(e.tipo==="eletivo"&&e.mod==="TC"&&novo[e.valorUnit]) e.valorUnit=novo[e.valorUnit];
-    S.tcEletiva100=true; save();
+    S.tcEletiva100=true; save(true);
   }
   if(!S.escala){S.escala=DEF_ESCALA.map(x=>({...x}));S.escalaInicio=hojeStr();S.escalaExcl=[];}
-  if(gerarEscala()) save();
+  // lançamentos automáticos da escala não contam como "mudança" para o Drive:
+  // cada aparelho gera os seus, e assim um aparelho antigo não passa por cima de dados mais novos
+  if(gerarEscala()) save(true);
 }
 
 // lança os plantões da escala até o fim do mês que vem, sem repetir
@@ -235,9 +243,146 @@ function fixoEntrada(tipo,data){
   const c=S.config;
   return tipo==="turno" ? {tipo,data,p1:c.turnoP1,p2:c.turnoP2} : {tipo,data,valor:c[FIXO_CFG[tipo]]};
 }
-function save(){
+// auto = ajuste automático do app (não é mudança sua e não precisa ir para o Drive)
+function save(auto){
+  if(!auto) S.atualizado=Date.now();
   try{localStorage.setItem(KEY,JSON.stringify(S));}
   catch(e){toast("Não foi possível salvar neste navegador");}
+  if(!auto) agendarSync();
+}
+
+// ---------- Google Drive ----------
+// Os dados são guardados no arquivo minha-producao-dados.json no seu Google Drive.
+// O app só enxerga arquivos que ele mesmo criou (permissão drive.file).
+const GOOGLE_CLIENT_ID = "296795960257-i1p4ag1bvtsbq8m0alisnup06c2c1bmk.apps.googleusercontent.com"; // projeto Google Cloud "Minha Producao"
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE_NOME = "minha-producao-dados.json";
+const DKEY = "minha-producao-drive";
+// D: on (conectado), fileId, token, exp, base (versão sincronizada por último), ultimo (data da última sincronização)
+let D = {on:false};
+try{D = JSON.parse(localStorage.getItem(DKEY)) || D;}catch(e){}
+const saveD = () => {try{localStorage.setItem(DKEY,JSON.stringify(D));}catch(e){}};
+let tokenClient=null, tokenPend=null, syncSt="", syncMsg="", syncTimer=null;
+const temToken = () => !!(D.token && Date.now() < D.exp);
+
+function prepararGis(){
+  if(!GOOGLE_CLIENT_ID || document.getElementById("gis")) return;
+  const s=document.createElement("script");
+  s.id="gis"; s.src="https://accounts.google.com/gsi/client"; s.async=true;
+  s.onload=()=>{
+    tokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:GOOGLE_CLIENT_ID, scope:DRIVE_SCOPE,
+      callback:r=>{
+        const p=tokenPend; tokenPend=null; if(!p) return;
+        if(r.error) return p.err(new Error(r.error));
+        D.token=r.access_token; D.exp=Date.now()+(Number(r.expires_in||3600)-60)*1000; saveD(); p.ok();
+      },
+      error_callback:e=>{const p=tokenPend; tokenPend=null; if(p) p.err(new Error(e&&e.type||"cancelado"));}
+    });
+    // conectado e com permissão ainda válida: sincroniza ao abrir
+    if(D.on && temToken()) sincronizar();
+  };
+  document.head.appendChild(s);
+}
+// precisa ser chamado direto do toque do usuário (o Google abre uma janelinha)
+function pedirToken(){
+  return new Promise((ok,err)=>{
+    if(!tokenClient) return err(new Error("O Google ainda não carregou. Confira a internet e tente de novo."));
+    tokenPend={ok,err};
+    tokenClient.requestAccessToken({prompt: D.on ? "" : "consent"});
+  });
+}
+async function api(url,opt={}){
+  const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:"Bearer "+D.token}});
+  if(r.status===401){D.token=null;saveD();throw Object.assign(new Error("Permissão do Google expirou"),{auth:true});}
+  if(!r.ok) throw Object.assign(new Error("Erro do Google Drive ("+r.status+")"),{status:r.status});
+  return r;
+}
+async function acharArquivo(){
+  if(D.fileId){
+    try{
+      const j=await (await api("https://www.googleapis.com/drive/v3/files/"+D.fileId+"?fields=id,trashed")).json();
+      if(!j.trashed) return D.fileId;
+    }catch(e){if(e.auth) throw e;}
+  }
+  const q=encodeURIComponent("name='"+DRIVE_NOME+"' and trashed=false");
+  const j=await (await api("https://www.googleapis.com/drive/v3/files?q="+q+"&orderBy=modifiedTime%20desc&fields=files(id)")).json();
+  D.fileId=(j.files&&j.files[0]&&j.files[0].id)||null; saveD();
+  return D.fileId;
+}
+async function enviarDrive(){
+  const corpo=JSON.stringify(S);
+  if(D.fileId){
+    try{
+      await api("https://www.googleapis.com/upload/drive/v3/files/"+D.fileId+"?uploadType=media",{method:"PATCH",headers:{"Content-Type":"application/json"},body:corpo});
+      return;
+    }catch(e){if(e.auth) throw e; D.fileId=null;}
+  }
+  const b="limite"+uid();
+  const body="--"+b+"\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"+JSON.stringify({name:DRIVE_NOME,mimeType:"application/json"})
+    +"\r\n--"+b+"\r\nContent-Type: application/json\r\n\r\n"+corpo+"\r\n--"+b+"--";
+  const j=await (await api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",{method:"POST",headers:{"Content-Type":"multipart/related; boundary="+b},body})).json();
+  D.fileId=j.id; saveD();
+}
+function usarRemoto(r){
+  try{localStorage.setItem(KEY,JSON.stringify(r));}catch(e){}
+  S=r; load(); // load refaz a escala deste aparelho sem marcar como mudança
+}
+// compara com o Drive: quem mudou desde a última sincronização vence;
+// se os dois mudaram, pergunta qual manter
+async function sincronizar(conectar){
+  if(!GOOGLE_CLIENT_ID || syncSt==="indo" || !(D.on||conectar)) return;
+  clearTimeout(syncTimer);
+  syncSt="indo"; atualizarSync();
+  try{
+    if(!temToken()) await pedirToken(); // primeira coisa: ainda dentro do toque
+    const id=await acharArquivo();
+    const remoto = id ? await (await api("https://www.googleapis.com/drive/v3/files/"+id+"?alt=media")).json() : null;
+    const local=S.atualizado||0, base=D.base;
+    if(!remoto || !Array.isArray(remoto.entries)){
+      await enviarDrive();
+    } else if((remoto.atualizado||0)===local){
+      // iguais: nada a fazer
+    } else {
+      const remotoMudou = base==null || (remoto.atualizado||0)!==base;
+      const localMudou = base==null || local!==base;
+      // aparelho novo só com os plantões automáticos da escala: usa o Drive sem perguntar
+      const temDados = S.entries.some(e=>!e.escala);
+      if(!localMudou || !temDados) usarRemoto(remoto);
+      else if(!remotoMudou) await enviarDrive();
+      else if(confirm("Os dados deste aparelho e os do Google Drive são diferentes.\n\n"
+        +"Drive: "+remoto.entries.length+" lançamentos"+(remoto.atualizado?", alterado em "+new Date(remoto.atualizado).toLocaleString("pt-BR"):"")+"\n"
+        +"Este aparelho: "+S.entries.length+" lançamentos"+(local?", alterado em "+new Date(local).toLocaleString("pt-BR"):"")+"\n\n"
+        +"OK = usar os dados do Drive neste aparelho\nCancelar = manter os deste aparelho e substituir os do Drive")) usarRemoto(remoto);
+      else await enviarDrive();
+    }
+    D.base=S.atualizado||0; D.ultimo=Date.now();
+    if(conectar && !D.on){D.on=true; toast("Conectado ao Google Drive");}
+    saveD(); syncSt="ok"; syncMsg="";
+  }catch(e){
+    syncSt = e.auth ? "" : "erro"; syncMsg=e.message||"Erro";
+    if(conectar && !D.on) toast("Não foi possível conectar: "+syncMsg);
+  }
+  atualizarSync();
+  // redesenha sem atrapalhar quem está digitando num campo
+  const digitando = document.activeElement && /^(INPUT|SELECT)$/.test(document.activeElement.tagName);
+  if(!digitando) render();
+}
+// depois de cada mudança sua, envia em 2 segundos (ou pede um toque se a permissão expirou)
+function agendarSync(){
+  if(!D.on) return;
+  clearTimeout(syncTimer);
+  if(temToken()) syncTimer=setTimeout(()=>sincronizar(),2000);
+  else {syncSt=""; atualizarSync();}
+}
+function atualizarSync(){
+  const el=$("#sync"); if(!el) return;
+  const pend = D.on && (S.atualizado||0)!==(D.base||0);
+  if(!D.on || syncSt==="ok" && !pend){el.innerHTML="";return;}
+  if(syncSt==="indo"){el.innerHTML=`<div class="syncbar"><span>Sincronizando com o Google Drive…</span></div>`;return;}
+  const txt = syncSt==="erro" ? "Não foi possível sincronizar ("+esc(syncMsg)+")."
+    : pend ? "Há mudanças ainda não salvas no Google Drive." : "Toque para buscar os dados do Google Drive.";
+  el.innerHTML=`<div class="syncbar${syncSt==="erro"?" erro":""}"><span>${txt}</span><button class="btn pri" data-sync>Sincronizar</button></div>`;
 }
 
 // ---------- regras de pagamento ----------
@@ -486,9 +631,18 @@ function vAjustes(){
   <p class="small" style="margin:0 4px 8px"><b>Cooperativa:</b> período de 21 a 20, pago no mês seguinte ao fechamento (21/10 a 20/11 paga em dezembro).<br><b>Hospital Unimed:</b> mês inteiro, pago dois meses depois (outubro paga em dezembro).</p>
   <p class="small" style="margin:0 4px">Mudanças nos valores só valem para lançamentos novos. Os já lançados mantêm o valor da época.</p>
   ${tabela("USG","USG eletivo")}${tabela("TC","TC eletiva")}${tabela("TCU","TC urgência / internado")}
+  <h2>Google Drive</h2>
+  <div class="card">${!GOOGLE_CLIENT_ID
+    ? `<p class="small" style="margin:0">A sincronização com o Google Drive ainda não foi configurada.</p>`
+    : D.on
+    ? `<p class="small" style="margin-top:0">Conectado. Seus dados são salvos sozinhos no arquivo <b>${DRIVE_NOME}</b> do seu Google Drive. Em outro aparelho, abra o app e conecte a mesma conta para ver tudo.${D.ultimo?"<br>Última sincronização: "+new Date(D.ultimo).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):""}</p>
+      <div class="row-btns"><button class="btn pri" data-act="drive-sync">Sincronizar agora</button><button class="btn" data-act="drive-sair">Desconectar</button></div>`
+    : `<p class="small" style="margin-top:0">Guarde seus dados no seu Google Drive. Assim eles não se perdem se o celular for trocado, e você vê tudo em outro aparelho.</p>
+      <button class="btn pri" data-act="drive-on">Conectar ao Google Drive</button>`}
+  </div>
   <h2>Backup</h2>
   <div class="card">
-    <p class="small" style="margin-top:0">Os dados ficam salvos só neste aparelho e navegador. Faça backup de vez em quando ou para passar para outro aparelho.</p>
+    <p class="small" style="margin-top:0">${D.on?"Além do Drive, você pode baixar uma cópia manual quando quiser.":"Os dados ficam salvos só neste aparelho e navegador. Faça backup de vez em quando ou para passar para outro aparelho."}</p>
     <div class="row-btns"><button class="btn" data-act="exportar">Baixar backup</button><button class="btn" data-act="importar">Restaurar backup</button></div>
     <input type="file" id="arq" accept="application/json,.json" hidden>
   </div>`;
@@ -549,6 +703,14 @@ $("#app").addEventListener("click",ev=>{
     S.escala=S.escala.filter(x=>x.id!==id);
     S.entries=S.entries.filter(e=>!(e.escala===id&&e.data>hoje));
     save();render();toast("Removido da escala");
+    return;
+  }
+  if(a==="drive-on") return sincronizar(true);
+  if(a==="drive-sync") return sincronizar();
+  if(a==="drive-sair"){
+    if(!confirm("Desconectar do Google Drive? Os dados continuam neste aparelho e no Drive, mas deixam de ser sincronizados.")) return;
+    try{if(D.token&&window.google) google.accounts.oauth2.revoke(D.token,()=>{});}catch(e){}
+    D={on:false}; saveD(); syncSt=""; atualizarSync(); render(); toast("Desconectado do Google Drive");
     return;
   }
   if(a==="exportar") return exportar();
@@ -618,8 +780,12 @@ function importar(f){
   r.readAsText(f);
 }
 
+$("#sync").addEventListener("click",ev=>{if(ev.target.closest("[data-sync]")) sincronizar();});
+
 load();
 render();
+prepararGis();
+atualizarSync();
 </script>
 </body>
 </html>
