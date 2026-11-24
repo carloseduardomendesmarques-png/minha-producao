@@ -123,14 +123,14 @@ input[type=date],input[type=text],input[type=number],input[inputmode],select{wid
 "use strict";
 // ---------- valores padrão ----------
 const DEF_CFG = {
-  turnoP1: 200,      // parcela do turno paga no mês seguinte
-  turnoP2: 150,      // parcela do turno paga no segundo mês
+  turnoP1: 200,      // parcela do turno paga pela cooperativa (período 21 a 20)
+  turnoP2: 150,      // parcela do turno paga pelo Hospital Unimed (mês inteiro)
   urgencia: 90,      // por exame de urgência / internado USG
   sobNoturno: 450,
   sobFds: 450,
   sobFeriado: 500,
-  diaMesSeguinte: 15, // eletivos + 1ª parcela do turno
-  diaFixos: 30        // sobreavisos, urgências, 2ª parcela do turno
+  diaMesSeguinte: 15, // cooperativa: eletivos + parcela de 200 do turno
+  diaFixos: 30        // hospital: sobreavisos, urgências, parcela de 150 do turno
 };
 const DEF_PRECOS = [
   ["USG","US - Abdome total",55.39],
@@ -158,17 +158,15 @@ const DEF_PRECOS = [
 ].map(([mod,nome,valor],i)=>({id:"p"+i,mod,nome,valor}));
 
 const TIPOS = {
-  eletivo:     {nome:"Eletivos",                  dica:"USG / TC da agenda"},
-  urgencia:    {nome:"Urgência / internado",      dica:"USG / TC · por exame"},
-  turno:       {nome:"Turno 6h",                  dica:"Meio de semana"},
-  sob_noturno: {nome:"Sobreaviso noturno",        dica:"USG"},
-  sob_fds:     {nome:"Sobreaviso fim de semana",  dica:"USG"},
-  sob_feriado: {nome:"Sobreaviso feriado",        dica:"12h"},
+  eletivo:     {nome:"Eletivos",                  dica:"USG / TC · cooperativa"},
+  urgencia:    {nome:"Urgência / internado",      dica:"USG / TC · hospital"},
+  turno:       {nome:"Turno 6h",                  dica:"Cooperativa + hospital"},
+  sob_noturno: {nome:"Sobreaviso noturno",        dica:"USG · hospital"},
+  sob_fds:     {nome:"Sobreaviso fim de semana",  dica:"USG · hospital"},
+  sob_feriado: {nome:"Sobreaviso feriado",        dica:"12h · hospital"},
   fechamento:  {nome:"Total de período",          dica:"Eletivos já fechados"}
 };
 const FIXO_CFG = {sob_noturno:"sobNoturno", sob_fds:"sobFds", sob_feriado:"sobFeriado"};
-// valor fixo (turnos e sobreavisos) x produção (pago por exame)
-const CAT = {turno:"fixo", sob_noturno:"fixo", sob_fds:"fixo", sob_feriado:"fixo", eletivo:"producao", eletivo_tc:"producao", fechamento:"producao", urgencia:"producao", urgencia_tc:"producao"};
 const modOf = e => e.mod==="TC" ? "TC" : "USG";
 // escala fixa: plantões que se repetem toda semana (dow: 0 = domingo ... 6 = sábado)
 const DEF_ESCALA = [{id:"e1",dow:1,tipo:"turno"},{id:"e2",dow:1,tipo:"sob_noturno"},{id:"e3",dow:0,tipo:"sob_fds"}];
@@ -243,30 +241,37 @@ function save(){
 }
 
 // ---------- regras de pagamento ----------
-// período dos eletivos: dia 21 até dia 20 do mês seguinte; paga no dia 15 do mês após o fechamento
+// Quem paga:
+//  Cooperativa: eletivos USG/TC e a parcela de R$ 200 do turno.
+//    Período de apuração do dia 21 ao dia 20 do mês seguinte; paga no dia 15 do mês após o fechamento
+//    (ex.: 21/10 a 20/11 é pago em 15/12).
+//  Hospital Unimed: parcela de R$ 150 do turno, urgências/internados USG e TC e os sobreavisos.
+//    Período de apuração é o mês inteiro; paga no dia 30, dois meses depois (ex.: outubro é pago em 30/12).
+const PAGADOR = {coop:"Cooperativa", hosp:"Hospital Unimed"};
 function periodoEletivo(s){
   const p=parse(s), fimM = p.d>=21 ? p.m+1 : p.m;
   return {ini:ymd(p.y,fimM-1,21), fim:ymd(p.y,fimM,20), pag:ymd(p.y,fimM+1,S.config.diaMesSeguinte)};
 }
+// cada parcela diz quem paga (pag), o mês de apuração a que pertence (comp) e se é fixo ou produção (cat)
 function parcelas(e){
-  const p=parse(e.data), c=S.config, mes=fMes(p.y,p.m), fix=ymd(p.y,p.m+2,c.diaFixos);
+  const p=parse(e.data), c=S.config, mes=fMes(p.y,p.m), fix=ymd(p.y,p.m+2,c.diaFixos), cm=e.data.slice(0,7);
+  const pe=periodoEletivo(e.data), faixa=fCurta(pe.ini)+" a "+fCurta(pe.fim), cp=pe.fim.slice(0,7);
   switch(e.tipo){
     case "eletivo":
     case "fechamento":{
-      const pe=periodoEletivo(e.data);
       const valor = e.tipo==="eletivo" ? e.qtd*e.valorUnit : e.valor;
       const mod = e.tipo==="eletivo" ? modOf(e)+" " : "";
-      return [{data:pe.pag, valor, grupo:"Eletivos "+mod+fCurta(pe.ini)+" a "+fCurta(pe.fim), qtd:e.tipo==="eletivo"?e.qtd:0}];
+      return [{data:pe.pag, valor, grupo:"Eletivos "+mod+faixa, qtd:e.tipo==="eletivo"?e.qtd:0, pag:"coop", comp:cp, cat:"producao"}];
     }
     case "turno":
       return [
-        {data:ymd(p.y,p.m+1,c.diaMesSeguinte), valor:e.p1, grupo:"Turnos de "+mes+" (1ª parcela)", qtd:1},
-        {data:fix, valor:e.p2, grupo:"Turnos de "+mes+" (2ª parcela)", qtd:1}
+        {data:pe.pag, valor:e.p1, grupo:"Turnos "+faixa+" (parcela cooperativa)", qtd:1, pag:"coop", comp:cp, cat:"fixo"},
+        {data:fix, valor:e.p2, grupo:"Turnos de "+mes+" (parcela hospital)", qtd:1, pag:"hosp", comp:cm, cat:"fixo"}
       ];
     case "urgencia":
-      return [{data:fix, valor:e.qtd*e.valorUnit, grupo:"Urgências/internados "+modOf(e)+" de "+mes, qtd:e.qtd}];
+      return [{data:fix, valor:e.qtd*e.valorUnit, grupo:"Urgências/internados "+modOf(e)+" de "+mes, qtd:e.qtd, pag:"hosp", comp:cm, cat:"producao"}];
     default:
-      return [{data:fix, valor:e.valor, grupo:TIPOS[e.tipo].nome+" de "+mes, qtd:1}];
+      return [{data:fix, valor:e.valor, grupo:TIPOS[e.tipo].nome+" de "+mes, qtd:1, pag:"hosp", comp:cm, cat:"fixo"}];
   }
 }
 const valorEntrada = e => parcelas(e).reduce((s,q)=>s+q.valor,0);
@@ -298,63 +303,66 @@ function vResumo(){
   const mesAtual=hojeStr().slice(0,7), meses=mesesDisponiveis();
   if(!mesSel||!meses.includes(mesSel)) mesSel=mesAtual;
   const verbo = mesSel<mesAtual ? "Recebido" : "A receber";
-  // pagamentos que caem no mês selecionado, separados em fixo e produção
-  const rec={fixo:{},producao:{}};
+  // pagamentos que caem no mês selecionado, separados por quem paga
+  const rec={coop:{},hosp:{}};
   for(const e of S.entries) for(const q of parcelas(e)){
     if(q.data.slice(0,7)!==mesSel) continue;
-    const b=rec[CAT[e.tipo]], k=q.data+"|"+q.grupo;
-    const it=b[k]||(b[k]={data:q.data,grupo:q.grupo,valor:0,qtd:0,dias:new Set()});
+    const b=rec[q.pag], k=q.data+"|"+q.grupo;
+    const it=b[k]||(b[k]={data:q.data,grupo:q.grupo,valor:0,qtd:0,dias:new Set(),fixo:q.cat==="fixo"});
     it.valor+=q.valor; it.qtd+=q.qtd; it.dias.add(e.data);
   }
   const soma=a=>a.reduce((s,i)=>s+i.valor,0);
-  const ordenar=o=>Object.values(o).sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:0);
-  const rf=ordenar(rec.fixo), rp=ordenar(rec.producao), rfT=soma(rf), rpT=soma(rp);
-  const prod=producaoMes(mesSel), pf=prod.filter(i=>CAT[i.key]==="fixo"), pp=prod.filter(i=>CAT[i.key]==="producao");
+  const ordenar=o=>Object.values(o).sort((a,b)=>a.data<b.data?-1:a.data>b.data?1:a.fixo===b.fixo?0:a.fixo?1:-1);
+  const rc=ordenar(rec.coop), rh=ordenar(rec.hosp), rcT=soma(rc), rhT=soma(rh);
+  const prod=producaoMes(mesSel);
   const vazio=`<div class="small" style="margin-top:6px">Nada neste mês.</div>`;
   // nos fixos, mostra os dias em que os plantões foram feitos
   const dias=i=>`<span class="dias">${[...i.dias].sort().map(d=>fCurta(d)+" "+fDow(d)).join(" · ")}</span><br>`;
-  const recCard=(titulo,a,t,fixo)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(t)}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}<br><span class="small">${fixo?dias(i)+"paga ":""}${fData(i.data)} · ${fDow(i.data)}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
-  const prodCard=(titulo,a,fixo)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(soma(a))}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">${fixo?dias(i):""}paga ${[...i.pags].sort().map(fCurta).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  const recCard=(titulo,a,t)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(t)}</span></div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.grupo)}${i.qtd>1?" · "+i.qtd:""}<br><span class="small">${i.fixo?dias(i)+"paga ":""}${fData(i.data)} · ${fDow(i.data)}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  const prodCard=(titulo,sub,a)=>`<div class="card"><div class="mhead"><b>${titulo}</b><span class="v">${R(soma(a))}</span></div><div class="small">${sub}</div>${a.length?a.map(i=>`<div class="ent"><span>${esc(i.nome)}${i.qtd?` · ${i.qtd} ${unid(i)}`:""}<br><span class="small">${i.fixo?dias(i):""}paga ${[...i.pags].sort().map(fData).join(" e ")}</span></span><span class="v">${R(i.valor)}</span></div>`).join(""):vazio}</div>`;
+  const pm=parse(mesSel+"-01"), ini=ymd(pm.y,pm.m-1,21), fim=ymd(pm.y,pm.m,20);
   return `
   <div class="mtabs">${meses.map(k=>`<button class="mtab${k===mesSel?" on":""}" data-act="mes" data-k="${k}">${abrevMes(k)}</button>`).join("")}</div>
   <div class="card hero">
     <div class="lbl">${verbo} em ${nomeMes(mesSel)}</div>
-    <div class="big">${R(rfT+rpT)}</div>
-    <div class="split"><span>Fixo <b>${R(rfT)}</b></span><span>Produção <b>${R(rpT)}</b></span></div>
+    <div class="big">${R(rcT+rhT)}</div>
+    <div class="split"><span>Cooperativa <b>${R(rcT)}</b></span><span>Hospital Unimed <b>${R(rhT)}</b></span></div>
   </div>
   <h2>${verbo} no mês</h2>
-  ${recCard("Fixo",rf,rfT,true)}${recCard("Produção",rp,rpT)}
+  ${recCard(PAGADOR.coop,rc,rcT)}${recCard(PAGADOR.hosp,rh,rhT)}
   <h2>Produzido no mês</h2>
-  ${prodCard("Fixo",pf,true)}${prodCard("Produção",pp)}`;
+  ${prodCard(PAGADOR.coop,"Período "+fData(ini)+" a "+fData(fim),prod.coop)}
+  ${prodCard(PAGADOR.hosp,"Mês de "+nomeMes(mesSel),prod.hosp)}`;
 }
-// mês em que cada lançamento "conta": eletivos pelo fim do período (21 a 20), o resto pelo mês da data
-const mesProducao = e => (e.tipo==="eletivo"||e.tipo==="fechamento") ? periodoEletivo(e.data).fim.slice(0,7) : e.data.slice(0,7);
 function mesesDisponiveis(){
   const s=new Set([hojeStr().slice(0,7)]);
-  for(const e of S.entries){s.add(mesProducao(e));for(const q of parcelas(e))s.add(q.data.slice(0,7));}
+  for(const e of S.entries) for(const q of parcelas(e)){s.add(q.comp);s.add(q.data.slice(0,7));}
   return [...s].sort();
 }
+// produção apurada no mês k: cooperativa pelo período 21 a 20 que termina em k, hospital pelo mês k inteiro
 function producaoMes(k){
-  const g={};
-  for(const e of S.entries){
-    if(mesProducao(e)!==k) continue;
-    const ele=e.tipo==="eletivo"||e.tipo==="fechamento", tc=modOf(e)==="TC";
+  const g={coop:{},hosp:{}};
+  for(const e of S.entries) for(const q of parcelas(e)){
+    if(q.comp!==k) continue;
+    const tc=modOf(e)==="TC";
     const key = (e.tipo==="eletivo"||e.tipo==="urgencia") && tc ? e.tipo+"_tc" : e.tipo;
-    let it=g[key];
+    const b=g[q.pag];
+    let it=b[key];
     if(!it){
-      const pe=ele?periodoEletivo(e.data):null, faixa=ele?fCurta(pe.ini)+" a "+fCurta(pe.fim):"";
-      const nome = e.tipo==="eletivo" ? "Eletivos "+modOf(e)+" "+faixa
-        : e.tipo==="fechamento" ? "Eletivos "+faixa+" (total)"
+      const nome = e.tipo==="eletivo" ? "Eletivos "+modOf(e)
+        : e.tipo==="fechamento" ? "Eletivos (total do período)"
         : e.tipo==="urgencia" ? "Urgência / internado "+modOf(e)
+        : e.tipo==="turno" ? "Turno 6h (parcela "+(q.pag==="coop"?"cooperativa":"hospital")+")"
         : TIPOS[e.tipo].nome;
-      it=g[key]={key,nome,valor:0,qtd:0,pags:new Set(),dias:new Set()};
+      it=b[key]={key,nome,valor:0,qtd:0,pags:new Set(),dias:new Set(),fixo:q.cat==="fixo"};
     }
-    it.valor+=valorEntrada(e);
+    it.valor+=q.valor;
     it.qtd+=e.tipo==="fechamento"?0:(e.qtd||1);
-    parcelas(e).forEach(q=>it.pags.add(q.data));
+    it.pags.add(q.data);
     it.dias.add(e.data);
   }
-  return ["eletivo","eletivo_tc","fechamento","urgencia","urgencia_tc","turno","sob_noturno","sob_fds","sob_feriado"].filter(k=>g[k]).map(k=>g[k]);
+  const ordem=["eletivo","eletivo_tc","fechamento","urgencia","urgencia_tc","turno","sob_noturno","sob_fds","sob_feriado"];
+  return {coop:ordem.filter(k=>g.coop[k]).map(k=>g.coop[k]), hosp:ordem.filter(k=>g.hosp[k]).map(k=>g.hosp[k])};
 }
 const unid = i => /^(eletivo|urgencia)/.test(i.key) ? (i.qtd===1?"exame":"exames") : i.key==="turno" ? (i.qtd===1?"turno":"turnos") : (i.qtd===1?"plantão":"plantões");
 const nomeMes = k => {const p=parse(k+"-01");return MESES[p.m]+" de "+p.y;};
@@ -368,7 +376,7 @@ function rascunho(){
   return null;
 }
 function previsao(e){
-  return parcelas(e).map(q=>`<b>${R(q.valor)}</b> em ${fData(q.data)}`).join(" + ");
+  return parcelas(e).map(q=>`<b>${R(q.valor)}</b> em ${fData(q.data)} (${q.pag==="coop"?"cooperativa":"hospital"})`).join(" + ");
 }
 function vLancar(){
   const c=S.config;
@@ -418,21 +426,23 @@ function entLinha(e){
 
 function vProducao(){
   if(!S.entries.length) return `<div class="card empty">Nenhum lançamento ainda.</div>`;
-  // eletivos por período (para conferir com o relatório do hospital)
+  // cooperativa por período 21 a 20 (para conferir com o relatório da cooperativa)
   const per={};
-  for(const e of S.entries) if(e.tipo==="eletivo"||e.tipo==="fechamento"){
+  for(const e of S.entries) for(const q of parcelas(e)) if(q.pag==="coop"){
     const pe=periodoEletivo(e.data), k=pe.fim;
-    const g=per[k]||(per[k]={pe,q:0,v:0});
-    g.q += e.tipo==="eletivo"?e.qtd:0; g.v += valorEntrada(e);
+    const g=per[k]||(per[k]={pe,q:0,t:0,v:0});
+    if(e.tipo==="eletivo") g.q+=e.qtd; else if(e.tipo==="turno") g.t++;
+    g.v += q.valor;
   }
   const perL=Object.values(per).sort((a,b)=>a.pe.fim<b.pe.fim?1:-1);
+  const perInfo=g=>[g.q?g.q+" exame"+(g.q===1?"":"s"):"",g.t?g.t+" turno"+(g.t===1?"":"s"):""].filter(Boolean).map(s=>s+" · ").join("");
   // lançamentos por mês e dia
   const meses={};
   for(const e of [...S.entries].sort((a,b)=>a.data<b.data?1:a.data>b.data?-1:0)){
     const k=e.data.slice(0,7);
     (meses[k]||(meses[k]=[])).push(e);
   }
-  return `${perL.length?`<h2>Eletivos por período</h2><div class="card">${perL.map(g=>`<div class="ent"><span>${fCurta(g.pe.ini)} a ${fCurta(g.pe.fim)}<br><span class="small">${g.q?g.q+" exames · ":""}paga ${fData(g.pe.pag)}</span></span><span class="v">${R(g.v)}</span></div>`).join("")}</div>`:""}
+  return `${perL.length?`<h2>Cooperativa por período</h2><div class="card">${perL.map(g=>`<div class="ent"><span>${fCurta(g.pe.ini)} a ${fCurta(g.pe.fim)}<br><span class="small">${perInfo(g)}paga ${fData(g.pe.pag)}</span></span><span class="v">${R(g.v)}</span></div>`).join("")}</div>`:""}
   <h2>Lançamentos</h2>
   ${Object.entries(meses).map(([k,lst])=>{
     const p=parse(k+"-01"), tot=lst.reduce((s,e)=>s+valorEntrada(e),0);
@@ -461,8 +471,8 @@ function vAjustes(){
   return `${escala}
   <h2>Valores fixos (R$)</h2>
   <div class="card cfg">
-    ${linha("turnoP1","Turno 6h: 1ª parcela")}
-    ${linha("turnoP2","Turno 6h: 2ª parcela")}
+    ${linha("turnoP1","Turno 6h: parcela da cooperativa")}
+    ${linha("turnoP2","Turno 6h: parcela do hospital")}
     ${linha("urgencia","USG urgência / internado (por exame)")}
     ${linha("sobNoturno","Sobreaviso noturno")}
     ${linha("sobFds","Sobreaviso fim de semana")}
@@ -470,9 +480,10 @@ function vAjustes(){
   </div>
   <h2>Dias de pagamento</h2>
   <div class="card cfg">
-    ${linha("diaMesSeguinte","Mês seguinte: eletivos e 1ª parcela do turno")}
-    ${linha("diaFixos","Segundo mês: sobreavisos, urgências e 2ª parcela")}
+    ${linha("diaMesSeguinte","Cooperativa: eletivos USG/TC e parcela do turno")}
+    ${linha("diaFixos","Hospital Unimed: urgências, sobreavisos e parcela do turno")}
   </div>
+  <p class="small" style="margin:0 4px 8px"><b>Cooperativa:</b> período de 21 a 20, pago no mês seguinte ao fechamento (21/10 a 20/11 paga em dezembro).<br><b>Hospital Unimed:</b> mês inteiro, pago dois meses depois (outubro paga em dezembro).</p>
   <p class="small" style="margin:0 4px">Mudanças nos valores só valem para lançamentos novos. Os já lançados mantêm o valor da época.</p>
   ${tabela("USG","USG eletivo")}${tabela("TC","TC eletiva")}${tabela("TCU","TC urgência / internado")}
   <h2>Backup</h2>
