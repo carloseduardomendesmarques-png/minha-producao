@@ -217,13 +217,48 @@ function load(){
     S.tcEletiva100=true; save(true);
   }
   if(!S.escala){S.escala=DEF_ESCALA.map(x=>({...x}));S.escalaInicio=hojeStr();S.escalaExcl=[];}
+  // plantões automáticos já lançados em feriados futuros saem (os passados ficam como estão)
+  const hoje=hojeStr(), n0=S.entries.length;
+  S.entries=S.entries.filter(e=>!(e.escala && e.data>hoje && feriado(e.data)));
+  if(S.entries.length!==n0) save(true);
   // lançamentos automáticos da escala não contam como "mudança" para o Drive:
   // cada aparelho gera os seus, e assim um aparelho antigo não passa por cima de dados mais novos
   if(gerarEscala()) save(true);
 }
 
+// ---------- feriados (nacionais, Sergipe e Aracaju) ----------
+// Só feriados oficiais. Pontos facultativos (Carnaval, Corpus Christi, vésperas) não entram.
+const FERIADOS_FIXOS = {
+  "01-01":"Confraternização Universal", "03-17":"Aniversário de Aracaju", "04-21":"Tiradentes",
+  "05-01":"Dia do Trabalho", "07-08":"Emancipação Política de Sergipe", "09-07":"Independência do Brasil",
+  "10-12":"Nossa Senhora Aparecida", "11-02":"Finados", "11-15":"Proclamação da República",
+  "11-20":"Consciência Negra", "12-08":"Nossa Senhora da Conceição", "12-25":"Natal"
+};
+// domingo de Páscoa (calendário gregoriano)
+function pascoa(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3);
+  const h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  const mes=Math.floor((h+l-7*m+114)/31), dia=(h+l-7*m+114)%31+1;
+  return new Date(y,mes-1,dia);
+}
+function feriado(s){
+  if(FERIADOS_FIXOS[s.slice(5)]) return FERIADOS_FIXOS[s.slice(5)];
+  const p=pascoa(+s.slice(0,4));
+  return ymd(p.getFullYear(),p.getMonth(),p.getDate()-2)===s ? "Sexta-feira Santa" : null;
+}
+// feriados dos próximos 12 meses que caem num dia da escala
+function feriadosNaEscala(){
+  const dows=new Set(S.escala.map(x=>x.dow)), r=[], t=new Date();
+  for(let d=new Date(t.getFullYear(),t.getMonth(),t.getDate()+1), n=0; n<366; n++, d.setDate(d.getDate()+1)){
+    const s=ymd(d.getFullYear(),d.getMonth(),d.getDate()), f=feriado(s);
+    if(f && dows.has(d.getDay())) r.push({data:s,nome:f});
+  }
+  return r;
+}
+
 // lança os plantões da escala até o fim do mês que vem, sem repetir
-// o que já existe naquele dia nem o que você apagou
+// o que já existe naquele dia nem o que você apagou; em feriado não lança nada
+// (se você pegar o plantão do feriado, lança à mão)
 function gerarEscala(){
   const excl=new Set(S.escalaExcl||[]), t=new Date(), ate=ymd(t.getFullYear(),t.getMonth()+1,31);
   const ja=new Set(S.entries.map(e=>e.tipo+"|"+e.data));
@@ -231,6 +266,7 @@ function gerarEscala(){
   for(const p=parse(S.escalaInicio||hojeStr()), d=new Date(p.y,p.m,p.d); ; d.setDate(d.getDate()+1)){
     const s=ymd(d.getFullYear(),d.getMonth(),d.getDate());
     if(s>ate) break;
+    if(feriado(s)) continue;
     for(const it of S.escala){
       if(it.dow!==d.getDay()||excl.has(it.id+"|"+s)||ja.has(it.tipo+"|"+s)) continue;
       S.entries.push({...fixoEntrada(it.tipo,s),id:uid(),escala:it.id});
@@ -612,6 +648,8 @@ function vAjustes(){
     ${[...S.escala].sort((a,b)=>segPrimeiro(a.dow)-segPrimeiro(b.dow)).map(it=>`<div class="ent"><span><b>${DIAS_L[it.dow]}</b> · ${TIPOS[it.tipo].nome}</span><button class="x" data-act="delescala" data-id="${it.id}" aria-label="Tirar da escala">×</button></div>`).join("")||`<div class="small">Nenhum plantão na escala.</div>`}
     <div class="esc-add"><select id="esc_dow" aria-label="Dia da semana">${[1,2,3,4,5,6,0].map(d=>`<option value="${d}">${DIAS_L[d]}</option>`).join("")}</select><select id="esc_tipo" aria-label="Tipo de plantão">${["turno","sob_noturno","sob_fds","sob_feriado"].map(t=>`<option value="${t}">${TIPOS[t].nome}</option>`).join("")}</select><button class="btn" data-act="addescala">Incluir</button></div>
     <div class="field" style="margin:12px 0 0"><label for="esc_ini">Lançar a escala a partir de</label><input type="date" id="esc_ini" value="${S.escalaInicio}"></div>
+    ${(()=>{const fs=feriadosNaEscala();return `<p class="small" style="margin:12px 0 4px">Em feriados (nacionais, de Sergipe e de Aracaju) a escala não lança nada. Se você pegar o plantão do feriado, lance em <b>Sobreaviso feriado</b>.</p>
+    ${fs.length?`<div class="small"><b>Feriados na sua escala nos próximos 12 meses:</b><br>${fs.map(f=>`${fData(f.data)} · ${fDow(f.data)} · ${esc(f.nome)}`).join("<br>")}</div>`:`<div class="small">Nenhum feriado cai na sua escala nos próximos 12 meses.</div>`}`;})()}
   </div>`;
   return `${escala}
   <h2>Valores fixos (R$)</h2>
