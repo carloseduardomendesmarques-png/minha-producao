@@ -611,7 +611,7 @@ function linkAgenda(e){
   const p=parse(e.data), ini=new Date(p.y,p.m,p.d,h[0]), fim=new Date(p.y,p.m,p.d+(h[1]<=h[0]?1:0),h[1]);
   const f=d=>d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+"T"+pad(d.getHours())+"0000";
   return "https://calendar.google.com/calendar/render?"+new URLSearchParams({
-    action:"TEMPLATE", text:TIPOS[e.tipo].nome+" Unimed (extra)", dates:f(ini)+"/"+f(fim),
+    action:"TEMPLATE", text:"Unimed · "+TIPOS[e.tipo].nome+" (extra)", dates:f(ini)+"/"+f(fim),
     ctz:"America/Bahia", location:"Hospital Unimed, Aracaju", details:"Lançado no app Minha Produção"
   });
 }
