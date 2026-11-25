@@ -279,7 +279,10 @@ function gerarEscala(){
 }
 function fixoEntrada(tipo,data){
   const c=S.config;
-  return tipo==="turno" ? {tipo,data,p1:c.turnoP1,p2:c.turnoP2} : {tipo,data,valor:c[FIXO_CFG[tipo]]};
+  if(tipo==="turno") return {tipo,data,p1:c.turnoP1,p2:c.turnoP2};
+  const e={tipo,data,valor:c[FIXO_CFG[tipo]]};
+  if(tipo==="sob_feriado") e.periodo=L.per; // diurno ou noturno (só muda o horário na agenda)
+  return e;
 }
 // auto = ajuste automático do app (não é mudança sua e não precisa ir para o Drive)
 function save(auto){
@@ -473,13 +476,14 @@ function rotulo(e){
     case "eletivo": return e.exame+(e.qtd>1?" ×"+e.qtd:"");
     case "urgencia": return e.exame ? "Urgência · "+e.exame+(e.qtd>1?" ×"+e.qtd:"") : "Urgência/internado USG ×"+e.qtd;
     case "fechamento": {const pe=periodoEletivo(e.data);return "Eletivos "+fCurta(pe.ini)+" a "+fCurta(pe.fim)+" (total)";}
+    case "sob_feriado": return TIPOS[e.tipo].nome+(e.periodo?" ("+e.periodo+")":"");
     default: return TIPOS[e.tipo].nome;
   }
 }
 
 // ---------- telas ----------
 let tab = "resumo", mesSel = null;
-const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", umod:"USG", cont:{}, qtd:1, valor:""};
+const L = {tipo:"eletivo", data:hojeStr(), mod:"USG", umod:"USG", per:"diurno", cont:{}, qtd:1, valor:""};
 
 function vResumo(){
   if(!S.entries.length) return `<div class="card empty"><p><b>Nada lançado ainda.</b></p><p>Lance seus exames, turnos e sobreavisos e o app calcula quanto e quando você vai receber.</p><button class="btn pri" data-act="go" data-tab="lancar">Fazer o primeiro lançamento</button></div>`;
@@ -593,7 +597,8 @@ function vLancar(){
     <button class="btn pri full" data-act="salvar">Salvar</button>`;
   } else {
     const e=rascunho();
-    corpo=`<div class="info">${TIPOS[L.tipo].nome}: ${previsao(e)}</div>
+    const perSeg = L.tipo==="sob_feriado" ? `<div class="seg">${[["diurno","Diurno 7h–19h"],["noturno","Noturno 19h–7h"]].map(([k,t])=>`<button class="${L.per===k?"on":""}" data-act="per" data-p="${k}">${t}</button>`).join("")}</div>` : "";
+    corpo=`${perSeg}<div class="info">${TIPOS[L.tipo].nome}: ${previsao(e)}</div>
     <button class="btn pri full" data-act="salvar">Salvar ${R(valorEntrada(e))}</button>`;
   }
   const doDia=S.entries.filter(e=>e.data===L.data);
@@ -607,7 +612,7 @@ function vLancar(){
 const HORARIO = {turno:[13,19], sob_noturno:[19,7], sob_fds:[19,7], sob_feriado:[7,19]};
 // link que abre o Google Agenda com o evento preenchido (você só confere e salva)
 function linkAgenda(e){
-  const h=HORARIO[e.tipo]; if(!h) return "";
+  const h = e.tipo==="sob_feriado" && e.periodo==="noturno" ? [19,7] : HORARIO[e.tipo]; if(!h) return "";
   const p=parse(e.data), ini=new Date(p.y,p.m,p.d,h[0]), fim=new Date(p.y,p.m,p.d+(h[1]<=h[0]?1:0),h[1]);
   const f=d=>d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+"T"+pad(d.getHours())+"0000";
   return "https://calendar.google.com/calendar/render?"+new URLSearchParams({
@@ -727,6 +732,7 @@ $("#app").addEventListener("click",ev=>{
   if(a==="tipo"){L.tipo=b.dataset.t;L.qtd=1;return render();}
   if(a==="mod"){L.mod=b.dataset.m;return render();}
   if(a==="umod"){L.umod=b.dataset.m;return render();}
+  if(a==="per"){L.per=b.dataset.p;return render();}
   if(a==="mais"){L.cont[id]=(L.cont[id]||0)+1;return render();}
   if(a==="menos"){L.cont[id]=Math.max(0,(L.cont[id]||0)-1);return render();}
   if(a==="qmais"){L.qtd++;return render();}
