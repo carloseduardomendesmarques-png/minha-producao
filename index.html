@@ -92,6 +92,8 @@ input[type=date],input[type=text],input[type=number],input[inputmode],select{wid
 .ent{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
 .ent .x{border:none;background:none;color:var(--danger);font-size:18px;cursor:pointer;padding:4px 8px}
 .ent .v{font-weight:600;white-space:nowrap}
+.ent-d{display:flex;align-items:center;gap:2px}
+.cal{display:inline-flex;padding:6px;margin-right:4px;border-radius:8px;color:var(--brand);background:var(--brand-soft)}
 .day{font-size:13px;color:var(--muted);margin-top:10px;font-weight:600}
 .mhead{display:flex;justify-content:space-between;align-items:baseline}
 .mhead b{font-size:16px}
@@ -601,8 +603,23 @@ function vLancar(){
   ${corpo}
   ${doDia.length?`<h2>Lançado em ${fData(L.data)}</h2><div class="card">${doDia.map(entLinha).join("")}</div>`:""}`;
 }
+// horário padrão de cada plantão no Google Agenda [início, fim]; fim menor que início = termina no dia seguinte
+const HORARIO = {turno:[13,19], sob_noturno:[19,7], sob_fds:[19,7], sob_feriado:[7,19]};
+// link que abre o Google Agenda com o evento preenchido (você só confere e salva)
+function linkAgenda(e){
+  const h=HORARIO[e.tipo]; if(!h) return "";
+  const p=parse(e.data), ini=new Date(p.y,p.m,p.d,h[0]), fim=new Date(p.y,p.m,p.d+(h[1]<=h[0]?1:0),h[1]);
+  const f=d=>d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+"T"+pad(d.getHours())+"0000";
+  return "https://calendar.google.com/calendar/render?"+new URLSearchParams({
+    action:"TEMPLATE", text:TIPOS[e.tipo].nome+" Unimed (extra)", dates:f(ini)+"/"+f(fim),
+    ctz:"America/Bahia", location:"Hospital Unimed, Aracaju", details:"Lançado no app Minha Produção"
+  });
+}
+const ICONE_AGENDA=`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>`;
 function entLinha(e){
-  return `<div class="ent"><span>${esc(rotulo(e))}${e.escala?'<span class="tag esc">escala</span>':""}</span><span><span class="v">${R(valorEntrada(e))}</span><button class="x" data-act="apagar" data-id="${e.id}" aria-label="Apagar">×</button></span></div>`;
+  // plantões da escala já estão na agenda como eventos fixos; o botão aparece só nos extras
+  const ag = !e.escala && linkAgenda(e);
+  return `<div class="ent"><span>${esc(rotulo(e))}${e.escala?'<span class="tag esc">escala</span>':""}</span><span class="ent-d">${ag?`<a class="cal" href="${esc(ag)}" target="_blank" rel="noopener" aria-label="Adicionar à Google Agenda" title="Adicionar à Google Agenda">${ICONE_AGENDA}</a>`:""}<span class="v">${R(valorEntrada(e))}</span><button class="x" data-act="apagar" data-id="${e.id}" aria-label="Apagar">×</button></span></div>`;
 }
 
 function vProducao(){
